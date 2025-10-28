@@ -50,10 +50,6 @@ conda install -c conda-forge spacy-model-en_core_web_sm
 # 进行验证
 python verify_environment.py
 
-# 下载Aminer数据集
-echo "Downloading Aminer dataset..."
-python download_data.py
-
 echo ""
 echo "Setup completed successfully!"
 echo ""
