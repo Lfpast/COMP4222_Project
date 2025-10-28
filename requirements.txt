@@ -1,0 +1,17 @@
+# 这个文件仅供参考，实际安装通过 environment.yml 进行
+# Core packages that will be installed via conda
+py2neo==2021.2.3
+sentence-transformers==2.2.2
+transformers==4.25.1
+nltk==3.8.1
+spacy==3.7.2
+plotly==5.13.0
+pyunpack==0.3.0
+patool==1.12
+python-dateutil==2.8.2
+chardet==5.1.0
+pillow==9.4.0
+openpyxl==3.1.0
+joblib==1.2.0
+wandb==0.15.0
+tensorboard==2.12.0
