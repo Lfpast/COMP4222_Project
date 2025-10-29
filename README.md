@@ -37,7 +37,7 @@ If you need to run each step individually:
 
 **Step 3.1: Download Data**
 ```bash
-python data_download.py
+python download_data.py
 ```
 
 **Step 3.2: Process Data**
@@ -50,7 +50,7 @@ If automatic download fails, refer to the manual download guide in the script, o
 ## 📁 Project Structure
 ```
 .
-├── data_download.py      # Data download script
+├── download_data.py      # Data download script
 ├── process_data.py       # Data processing script
 ├── data.sh               # One-click data pipeline script
 ├── neo4j_import.py       # Neo4j data import

@@ -52,6 +52,14 @@ class AminerDataDownloader:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(self.raw_dir)
                 print(f"✅ ZIP extraction successful")
+                
+                # 解压成功后删除ZIP文件
+                try:
+                    os.remove(zip_path)
+                    print(f"🗑️  Deleted ZIP file: {os.path.basename(zip_path)}")
+                except Exception as e:
+                    print(f"⚠️  Could not delete ZIP file: {e}")
+                
                 return True
             elif zip_path.endswith('.gz'):
                 return self.extract_gzip(zip_path)
@@ -71,6 +79,14 @@ class AminerDataDownloader:
                 with open(output_path, 'wb') as f_out:
                     shutil.copyfileobj(f_in, f_out)
             print(f"✅ Gzip extraction successful: {output_path}")
+            
+            # 解压成功后删除GZIP文件
+            try:
+                os.remove(gz_path)
+                print(f"🗑️  Deleted GZIP file: {os.path.basename(gz_path)}")
+            except Exception as e:
+                print(f"⚠️  Could not delete GZIP file: {e}")
+            
             return True
         except Exception as e:
             print(f"❌ Gzip extraction failed: {e}")
@@ -218,10 +234,6 @@ def main():
                 print(f"   📄 {f}: {file_size:,} bytes")
             print(f"\n📊 Total: {total_size:,} bytes ({total_size/1024/1024:.2f} MB)")
         
-        print("\n📋 Next steps:")
-        print("   1. Run: python process_data.py")
-        print("   2. Run: python neo4j_import.py")
-        print("   3. Run: python han_model.py")
     else:
         print("❌ Download failed!")
         print("\n💡 Options:")

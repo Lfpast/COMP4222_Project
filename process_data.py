@@ -2,6 +2,7 @@ import pandas as pd
 import json
 from tqdm import tqdm
 import os
+import re
 
 class AcademicDataProcessor:
     def __init__(self):
@@ -9,6 +10,28 @@ class AcademicDataProcessor:
         self.processed_dir = "data/processed"
         os.makedirs(self.raw_dir, exist_ok=True)
         os.makedirs(self.processed_dir, exist_ok=True)
+        
+        # 停用词列表(常见无意义词)
+        self.stopwords = {
+            'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 
+            'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the', 
+            'to', 'was', 'will', 'with', 'we', 'our', 'this', 'these', 'using',
+            'based', 'can', 'via', 'new', 'approach', 'method', 'methods'
+        }
+    
+    def extract_keywords_from_title(self, title, max_keywords=5):
+        """从标题中提取关键词"""
+        if not title:
+            return []
+        
+        # 转小写并分词
+        words = re.findall(r'\b[a-z]{3,}\b', title.lower())
+        
+        # 过滤停用词
+        keywords = [w for w in words if w not in self.stopwords]
+        
+        # 返回前N个关键词
+        return keywords[:max_keywords]
     
     def load_raw_data(self):
         """从raw目录加载数据"""
@@ -39,13 +62,59 @@ class AcademicDataProcessor:
                 
                 elif filename.endswith('.txt'):
                     print(f"📖 Reading TXT file: {filename}")
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    # Aminer格式: #*标题 #@作者 #t年份 #c会议 #index编号 #!摘要
+                    valid_count = 0
+                    current_paper = {}
+                    
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         for line in f:
-                            try:
-                                paper = json.loads(line.strip())
-                                all_papers.append(paper)
-                            except:
+                            line = line.strip()
+                            if not line:
                                 continue
+                            
+                            # 检测到新论文开始(#index)或文件结束,保存当前论文
+                            if line.startswith('#index'):
+                                if current_paper and 'id' in current_paper:
+                                    all_papers.append(current_paper)
+                                    valid_count += 1
+                                # 开始新论文
+                                current_paper = {'id': line.replace('#index', '').strip()}
+                            
+                            elif line.startswith('#*'):
+                                current_paper['title'] = line[2:].strip()
+                            
+                            elif line.startswith('#@'):
+                                # 解析作者,用逗号分隔
+                                authors_str = line[2:].strip()
+                                authors = [{'name': name.strip(), 'id': f'author_{hash(name.strip()) % 100000}'} 
+                                          for name in authors_str.split(',') if name.strip()]
+                                current_paper['authors'] = authors
+                            
+                            elif line.startswith('#t'):
+                                year_str = line[2:].strip()
+                                try:
+                                    current_paper['year'] = int(year_str)
+                                except:
+                                    current_paper['year'] = year_str
+                            
+                            elif line.startswith('#c'):
+                                current_paper['venue'] = line[2:].strip()
+                            
+                            elif line.startswith('#!'):
+                                current_paper['abstract'] = line[2:].strip()
+                            
+                            elif line.startswith('#%'):
+                                # 引用关系
+                                if 'references' not in current_paper:
+                                    current_paper['references'] = []
+                                current_paper['references'].append(line[2:].strip())
+                        
+                        # 保存最后一篇论文
+                        if current_paper and 'id' in current_paper:
+                            all_papers.append(current_paper)
+                            valid_count += 1
+                    
+                    print(f"   ✅ Parsed {valid_count} papers from Aminer format")
             
             except Exception as e:
                 print(f"❌ Error reading {filename}: {e}")
@@ -78,6 +147,11 @@ class AcademicDataProcessor:
         print(f"📊 Processing {len(raw_papers)} papers...")
         
         for paper in tqdm(raw_papers, desc="Processing papers"):
+            # 确保paper是字典类型
+            if not isinstance(paper, dict):
+                print(f"⚠️  Skipping non-dict paper object: {type(paper).__name__}")
+                continue
+            
             # 获取paper_id (可能是id, paper_id, _id等)
             paper_id = paper.get("id") or paper.get("paper_id") or paper.get("_id", "")
             if not paper_id:
@@ -127,6 +201,11 @@ class AcademicDataProcessor:
             
             # 处理关键词
             keywords = paper.get("keywords", [])
+            
+            # 如果没有关键词,从标题中提取
+            if not keywords and paper.get("title"):
+                keywords = self.extract_keywords_from_title(paper.get("title"))
+            
             if isinstance(keywords, list):
                 for keyword in keywords:
                     if not keyword:
