@@ -292,10 +292,6 @@ def main():
         print("   • written_by.csv - Paper-Author relationships")
         print("   • cites.csv - Citation relationships")
         print("   • has_keyword.csv - Paper-Keyword relationships")
-        print("\n📋 Next steps:")
-        print("   1. Verify the CSV files")
-        print("   2. Run neo4j_import.py to import data to Neo4j")
-        print("   3. Run han_model.py to train the model")
     else:
         print("❌ Data processing failed!")
         print("\n💡 Troubleshooting:")
