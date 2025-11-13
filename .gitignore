@@ -75,3 +75,17 @@ checkpoints/
 *.tar
 *.7z
 *.rar
+
+
+# API Keys and Secrets
+.env
+*.env
+.env.local
+.env.*.local
+secrets.json
+config.yaml
+config.yml
+credentials.json
+keys/
+private_keys/
+
