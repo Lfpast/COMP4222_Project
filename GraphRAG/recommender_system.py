@@ -19,7 +19,7 @@ warnings.filterwarnings('ignore')
 
 class AcademicRecommender:
     def __init__(self, 
-                 model_path=r"training\models\trial5\han_embeddings.pth", 
+                 model_path=r"training\models\focused_v1\han_embeddings.pth", 
                  neo4j_uri="neo4j://127.0.0.1:7687",
                  neo4j_username="neo4j",
                  neo4j_password="87654321"):
@@ -300,7 +300,7 @@ class AcademicRecommender:
         return diversified[:top_k]
     
     def content_based_paper_recommendation(self, query_text: str, top_k: int = 10) -> List[Dict]:
-        """基于内容的论文推荐 - 使用原始 Sentence-BERT embeddings"""
+        """基于内容的论文推荐 - 使用 HAN-trained embeddings"""
         print(f"📚 Content-based paper recommendation for: {query_text}")
         
         if self.sentence_model is None:
@@ -315,13 +315,13 @@ class AcademicRecommender:
             print(f"❌ Failed to encode query: {e}")
             return []
         
-        # 获取论文嵌入 - USE ORIGINAL SENTENCE-BERT EMBEDDINGS
-        if 'paper' not in self.original_embeddings:
+        # 获取论文嵌入 - USE HAN-TRAINED EMBEDDINGS
+        if 'paper' not in self.embeddings:
             print("❌ Paper embeddings not found")
             return []
-        paper_embeddings = self._get_numpy_emb('paper', use_original=True)  # ← Key change!
+        paper_embeddings = self._get_numpy_emb('paper', use_original=False)  # ← Use HAN embeddings!
         print(f"   Paper embeddings shape: {paper_embeddings.shape}")
-        print(f"   Using ORIGINAL Sentence-BERT embeddings for semantic search")
+        print(f"   Using HAN-trained embeddings for graph-aware semantic search")
 
         # 改进的投影方法
         if query_embedding.shape[1] != paper_embeddings.shape[1]:
@@ -426,7 +426,7 @@ class AcademicRecommender:
             return []
         
         target_idx = self.id_maps['paper'][target_paper_id]
-        paper_embeddings = self._get_numpy_emb('paper')
+        paper_embeddings = self._get_numpy_emb('paper', use_original=False)  # Use HAN embeddings
 
         print(f"   Target paper index: {target_idx}")
         print(f"   Paper embeddings shape: {paper_embeddings.shape}")
@@ -522,8 +522,8 @@ class AcademicRecommender:
             print(f"⚠️ Author {author_id} not found in embeddings")
             return []
         
-        # 获取作者嵌入
-        author_embeddings = self._get_numpy_emb('author')
+        # 获取作者嵌入 - Use HAN embeddings
+        author_embeddings = self._get_numpy_emb('author', use_original=False)
         target_idx = self.id_maps['author'][author_id]
 
         # 找到相似作者（向量化）
@@ -667,7 +667,7 @@ class AcademicRecommender:
             return []
         
         target_idx = self.id_maps['paper'][target_paper_id]
-        paper_embeddings = self._get_numpy_emb('paper')
+        paper_embeddings = self._get_numpy_emb('paper', use_original=False)  # Use HAN embeddings
 
         # 方法1: 基于嵌入的相似度（向量化点积）
         try:
