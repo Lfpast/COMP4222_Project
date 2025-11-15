@@ -312,8 +312,18 @@ class AcademicRecommender:
         
         return recommendations
     
-    def collaborative_paper_recommendation(self, target_paper_id: str, top_k: int = 10) -> List[Dict]:
-        """基于协同过滤的论文推荐（使用图结构）"""
+    def collaborative_paper_recommendation(self, target_paper_id: str, top_k: int = 10, boost_citations: bool = True) -> List[Dict]:
+        """
+        Collaborative paper recommendation using citation graph structure
+        
+        Args:
+            target_paper_id: Target paper ID
+            top_k: Number of recommendations
+            boost_citations: If True, boost papers with citation relationships
+        
+        Returns:
+            List of recommended papers with metadata
+        """
         print(f"🔗 Collaborative paper recommendation for: {target_paper_id}")
         
         if 'paper' not in self.id_maps:
@@ -324,6 +334,48 @@ class AcademicRecommender:
             print(f"⚠️ Target paper {target_paper_id} not found in embeddings")
             return []
         
+        # Get citation neighborhood from graph
+        cited_papers = set()
+        citing_papers = set()
+        cocited_papers = set()
+        
+        if self.graph_db and boost_citations:
+            try:
+                # Papers cited by target
+                query_cited = f"""
+                MATCH (target:Paper {{paper_id: '{target_paper_id}'}})-[:CITES]->(cited:Paper)
+                RETURN cited.paper_id as paper_id
+                LIMIT 50
+                """
+                results = self.graph_db.run(query_cited).data()
+                cited_papers = {r['paper_id'] for r in results if r['paper_id'] in self.id_maps['paper']}
+                
+                # Papers citing target
+                query_citing = f"""
+                MATCH (citing:Paper)-[:CITES]->(target:Paper {{paper_id: '{target_paper_id}'}})
+                RETURN citing.paper_id as paper_id
+                LIMIT 50
+                """
+                results = self.graph_db.run(query_citing).data()
+                citing_papers = {r['paper_id'] for r in results if r['paper_id'] in self.id_maps['paper']}
+                
+                # Papers with co-citations (cite same papers)
+                query_cocite = f"""
+                MATCH (target:Paper {{paper_id: '{target_paper_id}'}})-[:CITES]->(common:Paper)<-[:CITES]-(cocited:Paper)
+                WHERE cocited.paper_id <> '{target_paper_id}'
+                RETURN cocited.paper_id as paper_id, COUNT(common) as shared_citations
+                ORDER BY shared_citations DESC
+                LIMIT 30
+                """
+                results = self.graph_db.run(query_cocite).data()
+                cocited_papers = {r['paper_id'] for r in results if r['paper_id'] in self.id_maps['paper']}
+                
+                print(f"   Citation context: {len(cited_papers)} cited, {len(citing_papers)} citing, {len(cocited_papers)} co-cited")
+                
+            except Exception as e:
+                print(f"   ⚠️ Citation query failed: {e}")
+        
+        # Calculate semantic similarity using HAN embeddings
         target_idx = self.id_maps['paper'][target_paper_id]
         paper_embeddings = self._get_numpy_emb('paper', use_original=False)
 
@@ -341,6 +393,17 @@ class AcademicRecommender:
             print(f"❌ Failed to calculate similarities: {e}")
             return []
         
+        # Boost scores for papers in citation neighborhood
+        if boost_citations and (cited_papers or citing_papers or cocited_papers):
+            paper_ids = [self.reverse_maps['paper'].get(i) for i in range(len(paper_embeddings))]
+            for i, pid in enumerate(paper_ids):
+                if pid in cited_papers:
+                    similarities[i] *= 1.5  # Strong boost for cited papers
+                elif pid in citing_papers:
+                    similarities[i] *= 1.3  # Medium boost for citing papers
+                elif pid in cocited_papers:
+                    similarities[i] *= 1.2  # Light boost for co-cited papers
+        
         similarities[target_idx] = -1
         
         paper_ids = [self.reverse_maps['paper'].get(i) for i in range(len(paper_embeddings))]
@@ -356,10 +419,21 @@ class AcademicRecommender:
         recommendations = []
         for rank, idx in enumerate(valid_indices_sorted, 1):
             paper_id = paper_ids[idx]
+            
+            # Mark citation relationship
+            citation_type = None
+            if paper_id in cited_papers:
+                citation_type = "cited_by_target"
+            elif paper_id in citing_papers:
+                citation_type = "cites_target"
+            elif paper_id in cocited_papers:
+                citation_type = "co-cited"
+            
             recommendations.append({
                 'paper_id': paper_id,
                 'similarity_score': float(similarities[idx]),
-                'rank': rank
+                'rank': rank,
+                'citation_relationship': citation_type
             })
         
         if recommendations:

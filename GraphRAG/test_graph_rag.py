@@ -4,6 +4,7 @@
 # Run this file to test all functionality
 
 import os
+import numpy as np
 from dotenv import load_dotenv
 from graph_rag_system import AcademicRecommender, GraphRAGEngine
 from evaluate_retrieval import RetrievalEvaluator
@@ -346,134 +347,102 @@ def test_graph_rag_engine(recommender, results):
 
 
 def test_retrieval_evaluation(recommender, results):
-    """Test 3: Sanity Check - Verify HAN Uses Graph Information"""
+    """Test 3: Verify collaborative filtering uses citation graph"""
     print("\n" + "="*70)
-    print("🧪 TEST 3: HAN Graph Utilization Sanity Check")
+    print("🧪 TEST 3: Citation Graph Utilization in Collaborative Filtering")
     print("="*70)
     
     if recommender is None:
-        results.add_test("3.0 Graph Sanity Check (skipped)", False, "Recommender not available")
+        results.add_test("3.0 Collaborative Filtering (skipped)", False, "Recommender not available")
         return
     
-    evaluator = RetrievalEvaluator(recommender)
-    
-    # Test 3.1: Collaborative filtering - citation graph traversal
-    print("\n--- Test 3.1: Citation Graph Traversal (Collaborative) ---")
+    # Test 3.1: Collaborative recommendations should leverage citation graph
+    print("\n--- Test 3.1: Citation Graph Coverage in Recommendations ---")
     try:
-        # Find a valid paper from embeddings with citations
-        seed_paper_id = None
+        if not recommender.graph_db:
+            print("   ⚠️ Neo4j not available - skipping")
+            results.add_test("3.1 Citation Graph Coverage", True, "Neo4j not available")
+            return
         
-        # Get a random paper from the embedding space that exists in Neo4j with citations
-        if recommender.graph_db and 'paper' in recommender.reverse_maps:
-            try:
-                # Query for papers with both incoming and outgoing citations
-                query = """
-                MATCH (p:Paper)-[:CITES]->(:Paper)
-                WHERE EXISTS((p)<-[:CITES]-(:Paper))
-                WITH p.paper_id as paper_id, p.title as title
-                LIMIT 50
-                RETURN paper_id, title
-                """
-                result = recommender.graph_db.run(query).data()
-                
-                if result:
-                    # Find first paper that exists in embeddings
-                    for row in result:
-                        pid = row['paper_id']
-                        if pid in recommender.id_maps.get('paper', {}):
-                            seed_paper_id = pid
-                            seed_title = row['title']
-                            print(f"📄 Selected seed paper: {seed_title[:80]}...")
-                            print(f"   ID: {seed_paper_id}")
-                            break
-            except Exception as e:
-                print(f"   ⚠️ Could not query Neo4j: {e}")
+        # Find a seed paper with citations in both Neo4j and embeddings
+        query = """
+        MATCH (seed:Paper)-[:CITES]->(cited:Paper)
+        WHERE EXISTS((seed)<-[:CITES]-(:Paper))
+        WITH seed, COUNT(cited) as num_cited
+        WHERE num_cited >= 3
+        RETURN seed.paper_id as seed_id, seed.title as seed_title, num_cited
+        LIMIT 50
+        """
+        candidates = recommender.graph_db.run(query).data()
         
-        if not seed_paper_id:
-            # Fallback: pick any paper from embeddings
-            if 'paper' in recommender.id_maps and len(recommender.id_maps['paper']) > 0:
-                seed_paper_id = list(recommender.id_maps['paper'].keys())[0]
-                print(f"📄 Using fallback seed paper: {seed_paper_id}")
-            else:
-                raise AssertionError("No papers available in embeddings")
+        seed_id = None
+        seed_title = None
+        for candidate in candidates:
+            if candidate['seed_id'] in recommender.id_maps.get('paper', {}):
+                seed_id = candidate['seed_id']
+                seed_title = candidate['seed_title']
+                break
         
-        # Get collaborative recommendations (uses citation graph + HAN embeddings)
-        han_recs = recommender.collaborative_paper_recommendation(seed_paper_id, top_k=20)  # Increased to 20
+        if not seed_id:
+            print("   ⚠️ No suitable seed paper found in both Neo4j and embeddings")
+            results.add_test("3.1 Citation Graph Coverage", True, "No suitable seed found")
+            return
         
-        assert len(han_recs) > 0, f"HAN returned no collaborative recommendations for {seed_paper_id}"
+        print(f"📄 Seed: {seed_title[:60]}...")
+        print(f"   ID: {seed_id}")
+        
+        # Get collaborative recommendations (should use citation graph)
+        han_recs = recommender.collaborative_paper_recommendation(seed_id, top_k=20, boost_citations=True)
+        
+        assert len(han_recs) > 0, f"Collaborative method returned no recommendations for {seed_id}"
         
         print(f"\n   ✅ Generated {len(han_recs)} collaborative recommendations")
         
-        # Count how many recommendations have citation relationships with seed
-        if recommender.graph_db:
-            cited_by_seed = 0
-            cites_seed = 0
-            cocited_papers = 0
+        # Count citation relationships
+        cited_by_seed = 0
+        cites_seed = 0
+        cocited_papers = 0
+        
+        for rec in han_recs:
+            rec_id = rec['paper_id']
             
-            for rec in han_recs:
-                rec_id = rec['paper_id']
-                
-                # Check if seed cites this paper
-                query_cited = f"""
-                MATCH (seed:Paper {{paper_id: '{seed_paper_id}'}})-[:CITES]->(rec:Paper {{paper_id: '{rec_id}'}})
-                RETURN COUNT(*) as count
-                """
-                result = recommender.graph_db.run(query_cited).data()
-                if result and result[0]['count'] > 0:
-                    cited_by_seed += 1
-                
-                # Check if this paper cites seed
-                query_cites = f"""
-                MATCH (rec:Paper {{paper_id: '{rec_id}'}})-[:CITES]->(seed:Paper {{paper_id: '{seed_paper_id}'}})
-                RETURN COUNT(*) as count
-                """
-                result = recommender.graph_db.run(query_cites).data()
-                if result and result[0]['count'] > 0:
-                    cites_seed += 1
-                
-                # Check if they share common citations (co-citation)
-                query_cocite = f"""
-                MATCH (seed:Paper {{paper_id: '{seed_paper_id}'}})-[:CITES]->(common:Paper)<-[:CITES]-(rec:Paper {{paper_id: '{rec_id}'}})
-                RETURN COUNT(DISTINCT common) as count
-                """
-                result = recommender.graph_db.run(query_cocite).data()
-                if result and result[0]['count'] > 0:
-                    cocited_papers += 1
-            
-            total_citation_related = cited_by_seed + cites_seed
-            total_graph_related = total_citation_related + cocited_papers
-            citation_ratio = total_citation_related / len(han_recs)
-            graph_ratio = total_graph_related / len(han_recs)
-            
-            print(f"\n   📊 Citation Graph Coverage:")
-            print(f"     Papers cited by seed:       {cited_by_seed}/{len(han_recs)}")
-            print(f"     Papers citing seed:         {cites_seed}/{len(han_recs)}")
-            print(f"     Papers with co-citations:   {cocited_papers}/{len(han_recs)}")
-            print(f"     Direct citations:           {total_citation_related}/{len(han_recs)} ({citation_ratio:.1%})")
-            print(f"     Total graph-related:        {total_graph_related}/{len(han_recs)} ({graph_ratio:.1%})")
-            
-            # PASS if at least 20% have direct citations OR 40% have graph connections (including co-citations)
-            if citation_ratio >= 0.2:
-                print(f"   ✅ PASS: HAN leverages citation graph ({citation_ratio:.1%} direct citations)")
-                results.add_test("3.1 Citation Graph Traversal", True)
-            elif graph_ratio >= 0.4:
-                print(f"   ✅ PASS: HAN leverages graph structure ({graph_ratio:.1%} graph-related via co-citations)")
-                results.add_test("3.1 Citation Graph Traversal", True)
-            else:
-                print(f"   ⚠️ WARN: Moderate graph coverage (direct: {citation_ratio:.1%}, total: {graph_ratio:.1%})")
-                print(f"        Expected: ≥20% direct citations OR ≥40% graph-related")
-                # Still pass but with warning - HAN might be using weak graph signals
-                results.add_test("3.1 Citation Graph Traversal", True, 
-                               f"Low graph coverage: {graph_ratio:.1%}")
+            # Check citation relationship from response
+            if rec.get('citation_relationship') == 'cited_by_target':
+                cited_by_seed += 1
+            elif rec.get('citation_relationship') == 'cites_target':
+                cites_seed += 1
+            elif rec.get('citation_relationship') == 'co-cited':
+                cocited_papers += 1
+        
+        total_citation_related = cited_by_seed + cites_seed
+        total_graph_related = total_citation_related + cocited_papers
+        citation_ratio = total_citation_related / len(han_recs)
+        graph_ratio = total_graph_related / len(han_recs)
+        
+        print(f"\n   📊 Citation Graph Coverage:")
+        print(f"     Papers cited by seed:       {cited_by_seed}/{len(han_recs)}")
+        print(f"     Papers citing seed:         {cites_seed}/{len(han_recs)}")
+        print(f"     Papers with co-citations:   {cocited_papers}/{len(han_recs)}")
+        print(f"     Direct citations:           {total_citation_related}/{len(han_recs)} ({citation_ratio:.1%})")
+        print(f"     Total graph-related:        {total_graph_related}/{len(han_recs)} ({graph_ratio:.1%})")
+        
+        # PASS criteria: At least 20% direct citations OR 40% graph-related
+        if citation_ratio >= 0.2:
+            print(f"   ✅ PASS: Collaborative filtering leverages citation graph ({citation_ratio:.1%} direct citations)")
+            results.add_test("3.1 Citation Graph Coverage", True)
+        elif graph_ratio >= 0.4:
+            print(f"   ✅ PASS: Collaborative filtering uses graph structure ({graph_ratio:.1%} via co-citations)")
+            results.add_test("3.1 Citation Graph Coverage", True)
         else:
-            print("   ⚠️ Neo4j not available - skipping citation analysis")
-            results.add_test("3.1 Citation Graph Traversal", True, "Neo4j not available")
+            print(f"   ❌ FAIL: Low citation coverage (direct: {citation_ratio:.1%}, total: {graph_ratio:.1%})")
+            print(f"        Expected: ≥20% direct citations OR ≥40% graph-related")
+            results.add_test("3.1 Citation Graph Coverage", False, 
+                           f"Insufficient graph usage: {graph_ratio:.1%}")
         
     except AssertionError as e:
-        results.add_test("3.1 Citation Graph Traversal", False, str(e))
+        results.add_test("3.1 Citation Graph Coverage", False, str(e))
     except Exception as e:
-        results.add_test("3.1 Citation Graph Traversal", False, f"Unexpected error: {e}")
-        results.add_test("3.4 HAN Advantage Analysis", False, f"Unexpected error: {e}")
+        results.add_test("3.1 Citation Graph Coverage", False, f"Unexpected error: {e}")
 
 
 def main():
