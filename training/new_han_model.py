@@ -444,14 +444,17 @@ class GraphEmbeddingTrainer:
         # Create a negative sampler
         # For every 1 'cites' edge, create 5 'fake' (negative) edges
         
-        # 统一使用 dgl.dataloading.GlobalNegativeSampler
+        # 兼容不同 DGL 版本的负采样器
         import dgl.dataloading
-        sampler = dgl.dataloading.GlobalNegativeSampler(
-            g=graph,
-            k=5,
-            etype=cites_etype_tuple
-        )
-        print("   Using 'dgl.dataloading.GlobalNegativeSampler'")
+        sampler = None
+        if hasattr(dgl.dataloading, 'GlobalUniformNegativeSampler'):
+            sampler = dgl.dataloading.GlobalUniformNegativeSampler(k=5)
+            print("   Using 'dgl.dataloading.GlobalUniformNegativeSampler'")
+        elif hasattr(dgl.dataloading, 'UniformNegativeSampler'):
+            sampler = dgl.dataloading.UniformNegativeSampler(k=5)
+            print("   Using 'dgl.dataloading.UniformNegativeSampler'")
+        else:
+            raise ImportError("No suitable negative sampler found in dgl.dataloading. Please upgrade DGL.")
         
         # Create an EdgeDataLoader to iterate over batches of edges
         dataloader = dgl.dataloading.EdgeDataLoader(
