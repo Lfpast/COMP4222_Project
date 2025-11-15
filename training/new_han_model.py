@@ -45,6 +45,12 @@ class HANModel(nn.Module):
         
     def forward(self, graph, inputs, apply_batchnorm=True):
         h = inputs
+        
+        # --- THE FIX: Part 1 ---
+        # Store the original SBERT embeddings to add back later
+        initial_inputs = inputs
+        # --- END OF FIX ---
+        
         for i, layer in enumerate(self.layers):
             h = layer(graph, h)
             if i < len(self.layers) - 1:  # Not the last layer
@@ -53,15 +59,30 @@ class HANModel(nn.Module):
                 h = {k: v.flatten(1) for k, v in h.items()}
         
         # Project to output dimension to match Sentence-BERT (384)
-        h = {k: self.output_projection(v) for k, v in h.items()}
+        # This is the "graph signal"
+        h_graph = {k: self.output_projection(v) for k, v in h.items()}
         
+        # --- THE FIX: Part 2 ---
+        # v_final = v_initial (SBERT) + v_graph (HAN)
+        h_final = {}
+        for k in h_graph.keys():
+            if k in initial_inputs:
+                # Add the original SBERT vector back in.
+                # This preserves the original semantic meaning.
+                h_final[k] = initial_inputs[k] + h_graph[k]
+            else:
+                # For other node types, just use the graph signal
+                h_final[k] = h_graph[k]
+        # --- END OF FIX ---
+
         # Apply batch normalization
         # Note: We apply BN during training *before* the loss
         if apply_batchnorm and self.training:
-            h = {k: self.batch_norms[k](v) if k in self.batch_norms else v 
-                 for k, v in h.items()}
+            # Apply batchnorm to the *final* residual-connected embedding
+            h_final = {k: self.batch_norms[k](v) if k in self.batch_norms else v 
+                       for k, v in h_final.items()}
         
-        return h
+        return h_final
 
 # --- NEW HELPER MODULE FOR LINK PREDICTION ---
 class DotProductPredictor(nn.Module):
@@ -556,8 +577,7 @@ class GraphEmbeddingTrainer:
         # Save model file
         save_data = {
             'model_state_dict': model.state_dict(),
-            'embeddings': final_embeddings,  # HAN-trained embeddings (for graph tasks)
-            'original_embeddings': node_features,  # Original Sentence-BERT embeddings (for semantic search)
+            'embeddings': final_embeddings,
             'id_maps': {
                 'paper': paper_id_map,
                 'author': author_id_map,
@@ -575,7 +595,6 @@ class GraphEmbeddingTrainer:
         model_path = os.path.join(save_dir, 'han_embeddings.pth')
         torch.save(save_data, model_path)
         print(f"   ✅ Model saved: {model_path}")
-        print(f"   📦 Saved both HAN-trained and original Sentence-BERT embeddings")
 
         # (Optional: Add back your summary.json generation here)
         
@@ -591,12 +610,6 @@ class GraphEmbeddingTrainer:
 
 if __name__ == "__main__":
     import sys
-    import io
-    
-    # Fix Windows encoding issues
-    if sys.platform == 'win32':
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
     # ===================== DEBUG CONFIGURATION =====================
     DEBUG_MODE = True  # Set to True to use the config below
@@ -616,7 +629,7 @@ if __name__ == "__main__":
     # ===================== END DEBUG CONFIGURATION =================
 
     print("=" * 70)
-    print("Academic Graph HAN Model Training (Link Prediction)")
+    print("🎓 Academic Graph HAN Model Training (Link Prediction)")
     print("=" * 70)
 
     if DEBUG_MODE:
@@ -646,7 +659,7 @@ if __name__ == "__main__":
         OUT_DIM = int(sys.argv[9])
         NUM_HEADS = int(sys.argv[10])
 
-    print(f"\nConfiguration:")
+    print(f"\n⚙️  Configuration:")
     print(f"   Neo4j URI: {NEO4J_URI}")
     print(f"   Sample size: {SAMPLE_SIZE if SAMPLE_SIZE else 'All'} papers")
     print(f"   Model: HIDDEN={HIDDEN_DIM}, OUT={OUT_DIM}, HEADS={NUM_HEADS}")
@@ -673,19 +686,14 @@ if __name__ == "__main__":
         )
 
         print("\n" + "=" * 70)
-        print("All tasks completed successfully!")
+        print("✅ All tasks completed successfully!")
         print("=" * 70)
 
-        print(f"\nOutput files:")
-        print(f"   * {SAVE_DIR}/han_embeddings.pth - Model and embeddings")
-        
+        print(f"\n📁 Output files:")
+        print(f"   • {SAVE_DIR}/han_embeddings.pth - Model and embeddings")
+
     except Exception as e:
-        print(f"\nTraining failed: {e}")
+        print(f"\n❌ Training failed: {e}")
         import traceback
         traceback.print_exc()
-        print("\nTroubleshooting:")
-        print("   1. Check Neo4j is running and accessible (URI, user, password).")
-        print("   2. Ensure your focused dataset is imported and has 'CITES' links.")
-        print("   3. Install required packages: pip install torch dgl sentence-transformers py2neo")
-        print("   4. Reduce 'batch_size' in 'train_model' if you run out of memory (OOM).")
         exit(1)
