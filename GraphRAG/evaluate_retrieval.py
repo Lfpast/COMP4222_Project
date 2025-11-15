@@ -652,9 +652,15 @@ class RetrievalEvaluator:
         print(f"Winner: {'🏆 HAN' if han['citation_coverage']['avg_citations'] > sem['citation_coverage']['avg_citations'] else '🏆 Semantic' if sem['citation_coverage']['avg_citations'] > han['citation_coverage']['avg_citations'] else '🤝 Tie'}")
         
         print("\n--- GRAPH STRUCTURE UTILIZATION ---")
-        print(f"HAN:      Co-citation score: {han['graph_structure_score']:.2%}")
-        print(f"Semantic: Co-citation score: {sem['graph_structure_score']:.2%}")
-        print(f"Winner: {'🏆 HAN' if han['graph_structure_score'] > sem['graph_structure_score'] else '🏆 Semantic' if sem['graph_structure_score'] > han['graph_structure_score'] else '🤝 Tie'}")
+        print(f"HAN:      Co-citation: {han['graph_structure_score']['cocitation_score']:.2%}, Citation connectivity: {han['graph_structure_score']['citation_connectivity']:.2%}")
+        print(f"          Author overlap: {han['graph_structure_score']['author_overlap_score']:.2%}, Keyword coherence: {han['graph_structure_score']['keyword_coherence']:.2%}")
+        print(f"Semantic: Co-citation: {sem['graph_structure_score']['cocitation_score']:.2%}, Citation connectivity: {sem['graph_structure_score']['citation_connectivity']:.2%}")
+        print(f"          Author overlap: {sem['graph_structure_score']['author_overlap_score']:.2%}, Keyword coherence: {sem['graph_structure_score']['keyword_coherence']:.2%}")
+        
+        # Overall graph structure winner (average of all 4 metrics)
+        han_graph_avg = np.mean(list(han['graph_structure_score'].values()))
+        sem_graph_avg = np.mean(list(sem['graph_structure_score'].values()))
+        print(f"Winner: {'🏆 HAN' if han_graph_avg > sem_graph_avg else '🏆 Semantic' if sem_graph_avg > han_graph_avg else '🤝 Tie'} (avg: HAN {han_graph_avg:.2%} vs Semantic {sem_graph_avg:.2%})")
         
         print("\n--- RANKING COMPARISON ---")
         print(f"Overlap: {comp['overlap_count']}/{len(han['recommendations'])} papers ({comp['overlap_ratio']:.1%})")
@@ -712,9 +718,12 @@ class RetrievalEvaluator:
         elif sem['citation_coverage']['avg_citations'] > han['citation_coverage']['avg_citations']:
             scores['semantic'] += 1
         
-        if han['graph_structure_score'] > sem['graph_structure_score']:
+        # Graph structure score (average of all 4 metrics)
+        han_graph_avg = np.mean(list(han['graph_structure_score'].values()))
+        sem_graph_avg = np.mean(list(sem['graph_structure_score'].values()))
+        if han_graph_avg > sem_graph_avg:
             scores['han'] += 1
-        elif sem['graph_structure_score'] > han['graph_structure_score']:
+        elif sem_graph_avg > han_graph_avg:
             scores['semantic'] += 1
         
         # New metrics
@@ -833,8 +842,11 @@ def main():
     sem_citations = np.mean([r['semantic']['citation_coverage']['avg_citations'] for r in all_results])
     print(f"Avg Citations: HAN {han_citations:.1f}, Semantic {sem_citations:.1f}")
     
-    han_graph = np.mean([r['han']['graph_structure_score'] for r in all_results])
-    sem_graph = np.mean([r['semantic']['graph_structure_score'] for r in all_results])
+    # Calculate average graph structure score across all queries
+    han_graph_scores = [np.mean(list(r['han']['graph_structure_score'].values())) for r in all_results]
+    sem_graph_scores = [np.mean(list(r['semantic']['graph_structure_score'].values())) for r in all_results]
+    han_graph = np.mean(han_graph_scores)
+    sem_graph = np.mean(sem_graph_scores)
     print(f"Avg Graph Score: HAN {han_graph:.2%}, Semantic {sem_graph:.2%}")
     
     avg_overlap = np.mean([r['comparison']['overlap_ratio'] for r in all_results])

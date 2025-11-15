@@ -401,7 +401,12 @@ def test_retrieval_evaluation(recommender, results):
         assert 0 <= han['diversity']['venue_diversity'] <= 1, "Invalid diversity"
         assert 0 <= han['novelty'] <= 1, "Invalid novelty"
         assert han['citation_coverage']['avg_citations'] >= 0, "Invalid citations"
-        assert 0 <= han['graph_structure_score'] <= 1, "Invalid graph score"
+        
+        # Validate graph structure score (now a dict with multiple metrics)
+        graph_score = han['graph_structure_score']
+        assert isinstance(graph_score, dict), "Graph score should be a dict"
+        assert 'cocitation_score' in graph_score, "Missing cocitation_score"
+        assert 0 <= graph_score['cocitation_score'] <= 1, "Invalid cocitation score"
         
         results.add_test("3.2 Metrics Calculation", True)
         
