@@ -8,7 +8,50 @@ from dotenv import load_dotenv
 from graph_rag_system import AcademicRecommender, GraphRAGEngine
 
 
-def test_recommender_system():
+class TestResults:
+    """Track test results and failures"""
+    def __init__(self):
+        self.total_tests = 0
+        self.passed_tests = 0
+        self.failed_tests = 0
+        self.failures = []
+    
+    def add_test(self, test_name, passed, error_msg=None):
+        self.total_tests += 1
+        if passed:
+            self.passed_tests += 1
+            print(f"✅ PASS: {test_name}")
+        else:
+            self.failed_tests += 1
+            self.failures.append((test_name, error_msg))
+            print(f"❌ FAIL: {test_name}")
+            if error_msg:
+                print(f"   Error: {error_msg}")
+    
+    def print_summary(self):
+        print("\n" + "="*70)
+        print("📊 TEST SUMMARY")
+        print("="*70)
+        print(f"Total Tests: {self.total_tests}")
+        print(f"Passed: {self.passed_tests} ✅")
+        print(f"Failed: {self.failed_tests} ❌")
+        
+        if self.failures:
+            print("\n❌ Failed Tests:")
+            for test_name, error_msg in self.failures:
+                print(f"  - {test_name}")
+                if error_msg:
+                    print(f"    {error_msg}")
+        
+        if self.failed_tests == 0:
+            print("\n🎉 ALL TESTS PASSED!")
+            return True
+        else:
+            print(f"\n⚠️ {self.failed_tests} test(s) failed")
+            return False
+
+
+def test_recommender_system(results):
     """Test the Academic Recommender System"""
     print("\n" + "="*70)
     print("🧪 TEST 1: Academic Recommender System")
@@ -22,9 +65,11 @@ def test_recommender_system():
     NEO4J_USERNAME = os.environ.get("NEO4J_USERNAME", "neo4j")
     NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "87654321")
     
+    recommender = None
+    
     try:
-        # Initialize recommender
-        print("\n📚 Initializing Academic Recommender...")
+        # Test 1.0: Initialization
+        print("\n--- Test 1.0: Recommender Initialization ---")
         recommender = AcademicRecommender(
             model_path=MODEL_PATH,
             neo4j_uri=NEO4J_URI,
@@ -32,41 +77,132 @@ def test_recommender_system():
             neo4j_password=NEO4J_PASSWORD
         )
         
-        # Test 1: Content-based recommendation
-        print("\n--- Test 1.1: Content-Based Recommendation ---")
+        # Validate initialization
+        assert recommender is not None, "Recommender is None"
+        assert hasattr(recommender, 'embeddings'), "Missing embeddings"
+        assert hasattr(recommender, 'id_maps'), "Missing id_maps"
+        assert 'paper' in recommender.id_maps, "Missing paper id_maps"
+        
+        results.add_test("1.0 Recommender Initialization", True)
+        
+    except Exception as e:
+        results.add_test("1.0 Recommender Initialization", False, str(e))
+        return None
+    
+    # Test 1.1: Content-based recommendation
+    print("\n--- Test 1.1: Content-Based Recommendation ---")
+    try:
         content_recs = recommender.content_based_paper_recommendation(
             "graph neural networks for recommender systems", 
             top_k=5
         )
-        print(f"\n✅ Content-based recommendations: {len(content_recs)} papers")
+        
+        # Validation criteria
+        assert content_recs is not None, "Recommendations are None"
+        assert len(content_recs) > 0, "No recommendations returned"
+        assert len(content_recs) <= 5, f"Too many recommendations: {len(content_recs)}"
+        
+        # Validate recommendation structure
+        for i, rec in enumerate(content_recs):
+            assert 'paper_id' in rec, f"Rec {i} missing paper_id"
+            assert 'similarity_score' in rec, f"Rec {i} missing similarity_score"
+            assert 'rank' in rec, f"Rec {i} missing rank"
+            assert rec['rank'] == i + 1, f"Rec {i} has wrong rank: {rec['rank']}"
+            assert 0 <= rec['similarity_score'] <= 1, f"Invalid similarity score: {rec['similarity_score']}"
+        
+        # Validate scores are sorted descending
+        scores = [rec['similarity_score'] for rec in content_recs]
+        assert scores == sorted(scores, reverse=True), "Scores not sorted descending"
+        
+        print(f"   Returned {len(content_recs)} recommendations")
         for rec in content_recs[:3]:
-            print(f"  {rec['rank']}. {rec.get('title', 'Unknown')}")
-            print(f"     Score: {rec['similarity_score']:.3f}")
+            print(f"   {rec['rank']}. {rec.get('title', 'Unknown')} (score: {rec['similarity_score']:.3f})")
         
-        # Test 2: Collaborative recommendation
-        if content_recs:
-            print("\n--- Test 1.2: Collaborative Filtering Recommendation ---")
-            target_paper = content_recs[0]['paper_id']
-            collab_recs = recommender.collaborative_paper_recommendation(
-                target_paper, 
-                top_k=5
-            )
-            print(f"\n✅ Collaborative recommendations: {len(collab_recs)} papers")
-            for rec in collab_recs[:3]:
-                print(f"  {rec['rank']}. {rec.get('title', 'Unknown')}")
-                print(f"     Score: {rec['similarity_score']:.3f}")
+        results.add_test("1.1 Content-Based Recommendation", True)
         
-        print("\n✅ Recommender system tests passed!")
-        return recommender
-        
+    except AssertionError as e:
+        results.add_test("1.1 Content-Based Recommendation", False, str(e))
+        content_recs = None
     except Exception as e:
-        print(f"\n❌ Recommender test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+        results.add_test("1.1 Content-Based Recommendation", False, f"Unexpected error: {e}")
+        content_recs = None
+    
+    # Test 1.2: Collaborative recommendation
+    print("\n--- Test 1.2: Collaborative Filtering Recommendation ---")
+    try:
+        if not content_recs:
+            raise AssertionError("Cannot test collaborative filtering - no papers from content-based test")
+        
+        target_paper = content_recs[0]['paper_id']
+        collab_recs = recommender.collaborative_paper_recommendation(
+            target_paper, 
+            top_k=5
+        )
+        
+        # Validation criteria
+        assert collab_recs is not None, "Recommendations are None"
+        assert len(collab_recs) > 0, "No recommendations returned"
+        assert len(collab_recs) <= 5, f"Too many recommendations: {len(collab_recs)}"
+        
+        # Validate no self-recommendation
+        collab_ids = [rec['paper_id'] for rec in collab_recs]
+        assert target_paper not in collab_ids, "Recommended the target paper itself"
+        
+        # Validate structure
+        for i, rec in enumerate(collab_recs):
+            assert 'paper_id' in rec, f"Rec {i} missing paper_id"
+            assert 'similarity_score' in rec, f"Rec {i} missing similarity_score"
+            assert 'rank' in rec, f"Rec {i} missing rank"
+            assert rec['rank'] == i + 1, f"Rec {i} has wrong rank"
+        
+        # Validate scores are sorted descending
+        scores = [rec['similarity_score'] for rec in collab_recs]
+        assert scores == sorted(scores, reverse=True), "Scores not sorted descending"
+        
+        print(f"   Returned {len(collab_recs)} recommendations")
+        for rec in collab_recs[:3]:
+            print(f"   {rec['rank']}. {rec.get('title', 'Unknown')} (score: {rec['similarity_score']:.3f})")
+        
+        results.add_test("1.2 Collaborative Filtering", True)
+        
+    except AssertionError as e:
+        results.add_test("1.2 Collaborative Filtering", False, str(e))
+    except Exception as e:
+        results.add_test("1.2 Collaborative Filtering", False, f"Unexpected error: {e}")
+    
+    # Test 1.3: Metadata quality
+    print("\n--- Test 1.3: Metadata Quality ---")
+    try:
+        if not content_recs:
+            raise AssertionError("No recommendations to check metadata")
+        
+        paper_ids = [rec['paper_id'] for rec in content_recs]
+        metadata = recommender.get_paper_metadata(paper_ids)
+        
+        assert metadata is not None, "Metadata is None"
+        assert len(metadata) > 0, "No metadata returned"
+        
+        # Check that at least some papers have real metadata (not fallback)
+        real_metadata_count = sum(1 for m in metadata.values() if not m.get('is_fallback', False))
+        
+        print(f"   Retrieved metadata for {len(metadata)} papers")
+        print(f"   Real metadata: {real_metadata_count}/{len(metadata)}")
+        
+        # We expect at least some real metadata if Neo4j is connected
+        if recommender.graph_db is not None:
+            assert real_metadata_count > 0, "No real metadata found (all fallback)"
+        
+        results.add_test("1.3 Metadata Quality", True)
+        
+    except AssertionError as e:
+        results.add_test("1.3 Metadata Quality", False, str(e))
+    except Exception as e:
+        results.add_test("1.3 Metadata Quality", False, f"Unexpected error: {e}")
+    
+    return recommender
 
 
-def test_graph_rag_engine(recommender=None):
+def test_graph_rag_engine(recommender, results):
     """Test the GraphRAG Engine"""
     print("\n" + "="*70)
     print("🧪 TEST 2: GraphRAG Engine")
@@ -74,83 +210,119 @@ def test_graph_rag_engine(recommender=None):
     
     load_dotenv()
     
-    # If recommender not provided, create one
+    # If recommender not provided, skip
     if recommender is None:
-        MODEL_PATH = os.environ.get("MODEL_PATH", r"training\models\focused_v1\han_embeddings.pth")
-        NEO4J_URI = os.environ.get("NEO4J_URI", "neo4j://127.0.0.1:7687")
-        NEO4J_USERNAME = os.environ.get("NEO4J_USERNAME", "neo4j")
-        NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "87654321")
-        
-        recommender = AcademicRecommender(
-            model_path=MODEL_PATH,
-            neo4j_uri=NEO4J_URI,
-            neo4j_username=NEO4J_USERNAME,
-            neo4j_password=NEO4J_PASSWORD
-        )
+        results.add_test("2.0 GraphRAG Engine (skipped)", False, "Recommender not available")
+        return
     
     # Get LLM credentials
     DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
     
     if not DEEPSEEK_API_KEY:
-        print("❌ Error: DEEPSEEK_API_KEY not found in environment variables")
-        print("   Please add it to your .env file")
+        print("⚠️ DEEPSEEK_API_KEY not found - skipping LLM tests")
+        results.add_test("2.0 GraphRAG Initialization", False, "DEEPSEEK_API_KEY not set")
         return
     
+    engine = None
+    
+    # Test 2.0: Engine Initialization
+    print("\n--- Test 2.0: GraphRAG Engine Initialization ---")
     try:
-        # Initialize GraphRAG Engine
-        print("\n🚀 Initializing GraphRAG Engine...")
         engine = GraphRAGEngine(recommender, DEEPSEEK_API_KEY)
         
-        # Test 1: Full GraphRAG Query
-        print("\n--- Test 2.1: Full GraphRAG Query (Graph Enabled) ---")
+        assert engine is not None, "Engine is None"
+        assert hasattr(engine, 'recommender'), "Missing recommender"
+        assert hasattr(engine, 'llm_client'), "Missing llm_client"
+        
+        results.add_test("2.0 GraphRAG Initialization", True)
+        
+    except Exception as e:
+        results.add_test("2.0 GraphRAG Initialization", False, str(e))
+        return
+    
+    # Test 2.1: Full GraphRAG Query
+    print("\n--- Test 2.1: Full GraphRAG Query (Graph Enabled) ---")
+    try:
         test_query = "What are the main papers about Graph Neural Networks in recommender systems?"
         
         answer = engine.query(
             test_query, 
-            top_k_seeds=5, 
+            top_k_seeds=3,  # Use 3 for faster testing
             enable_graph_retrieval=True
         )
         
-        print("\n" + "="*70)
-        print("📝 GraphRAG Answer (Full Mode):")
-        print("="*70)
-        print(answer)
+        # Validation
+        assert answer is not None, "Answer is None"
+        assert isinstance(answer, str), f"Answer is not string: {type(answer)}"
+        assert len(answer) > 50, f"Answer too short: {len(answer)} chars"
+        assert not answer.startswith("Error:"), f"LLM returned error: {answer[:100]}"
         
-        # Test 2: Baseline Vector RAG (Ablation Study)
-        print("\n--- Test 2.2: Baseline Vector RAG (Graph Disabled) ---")
+        # Check that answer mentions papers or context
+        answer_lower = answer.lower()
+        has_content = any(keyword in answer_lower for keyword in 
+                         ['paper', 'research', 'graph', 'neural', 'network', 'recommend'])
+        assert has_content, "Answer doesn't contain expected keywords"
+        
+        print("\n📝 GraphRAG Answer (Full Mode):")
+        print(answer[:500] + ("..." if len(answer) > 500 else ""))
+        
+        results.add_test("2.1 Full GraphRAG Query", True)
+        
+    except AssertionError as e:
+        results.add_test("2.1 Full GraphRAG Query", False, str(e))
+    except Exception as e:
+        results.add_test("2.1 Full GraphRAG Query", False, f"Unexpected error: {e}")
+    
+    # Test 2.2: Baseline Vector RAG
+    print("\n--- Test 2.2: Baseline Vector RAG (Graph Disabled) ---")
+    try:
+        test_query = "What are the main papers about Graph Neural Networks?"
         
         answer_baseline = engine.query(
             test_query, 
-            top_k_seeds=5, 
+            top_k_seeds=3,
             enable_graph_retrieval=False
         )
         
-        print("\n" + "="*70)
-        print("📝 GraphRAG Answer (Baseline Mode):")
-        print("="*70)
-        print(answer_baseline)
+        # Validation
+        assert answer_baseline is not None, "Answer is None"
+        assert isinstance(answer_baseline, str), "Answer is not string"
+        assert len(answer_baseline) > 50, f"Answer too short: {len(answer_baseline)} chars"
+        assert not answer_baseline.startswith("Error:"), "LLM returned error"
         
-        # Test 3: Complex Query
-        print("\n--- Test 2.3: Complex Query ---")
-        complex_query = "Recommend papers using GNNs in recommender systems for data sparsity, listing common graph mining algorithms and two collaborators."
+        print("\n📝 Baseline Answer:")
+        print(answer_baseline[:500] + ("..." if len(answer_baseline) > 500 else ""))
         
-        answer_complex = engine.query(
-            complex_query, 
-            top_k_seeds=5, 
-            enable_graph_retrieval=True
-        )
+        results.add_test("2.2 Baseline Vector RAG", True)
         
-        print("\n" + "="*70)
-        print("📝 GraphRAG Answer (Complex Query):")
-        print("="*70)
-        print(answer_complex)
+    except AssertionError as e:
+        results.add_test("2.2 Baseline Vector RAG", False, str(e))
+    except Exception as e:
+        results.add_test("2.2 Baseline Vector RAG", False, f"Unexpected error: {e}")
+    
+    # Test 2.3: Answer Quality Comparison
+    print("\n--- Test 2.3: Answer Quality Comparison ---")
+    try:
+        # Both tests from 2.1 and 2.2 must have passed
+        # We check if graph-enabled answer is different from baseline
+        # (demonstrating that graph retrieval adds information)
         
-        print("\n✅ GraphRAG engine tests passed!")
+        test_query = "What papers discuss graph neural networks?"
+        
+        answer_with_graph = engine.query(test_query, top_k_seeds=3, enable_graph_retrieval=True)
+        answer_without_graph = engine.query(test_query, top_k_seeds=3, enable_graph_retrieval=False)
+        
+        # They should be different (graph context adds info)
+        # But this is not a strict requirement, so we just log
+        if answer_with_graph != answer_without_graph:
+            print("   ✓ Graph-enabled answer differs from baseline (expected)")
+        else:
+            print("   ℹ️ Answers are identical (graph context may not have changed output)")
+        
+        results.add_test("2.3 Answer Quality Comparison", True)
         
     except Exception as e:
-        print(f"\n❌ GraphRAG test failed: {e}")
-        import traceback
-        traceback.print_exc()
+        results.add_test("2.3 Answer Quality Comparison", False, f"Unexpected error: {e}")
 
 
 def main():
@@ -159,19 +331,26 @@ def main():
     print("🚀 GraphRAG System Test Suite")
     print("="*70)
     
+    results = TestResults()
+    
     # Test 1: Recommender System
-    recommender = test_recommender_system()
+    recommender = test_recommender_system(results)
     
     # Test 2: GraphRAG Engine (reuse recommender if successful)
-    if recommender is not None:
-        test_graph_rag_engine(recommender)
-    else:
-        print("\n⚠️ Skipping GraphRAG tests due to recommender initialization failure")
+    test_graph_rag_engine(recommender, results)
     
-    print("\n" + "="*70)
-    print("✅ All tests completed!")
-    print("="*70)
+    # Print summary and return exit code
+    all_passed = results.print_summary()
+    
+    if all_passed:
+        print("\n🎉 SUCCESS: All tests passed!")
+        return 0
+    else:
+        print(f"\n❌ FAILURE: {results.failed_tests} test(s) failed")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    exit_code = main()
+    sys.exit(exit_code)
