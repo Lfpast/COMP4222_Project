@@ -428,51 +428,68 @@ def test_retrieval_evaluation(recommender, results):
         
         # Compare with purely semantic approach
         print(f"\n   🔍 Baseline: Purely Semantic Recommendations")
-        semantic_recs = recommender.content_based_recommendation(seed_id, top_k=20)
-        
-        # Check citation coverage for semantic method
-        sem_cited_by = 0
-        sem_cites = 0
-        sem_cocited = 0
-        
-        for rec in semantic_recs:
-            rec_id = rec['paper_id']
-            
-            # Check actual citations in Neo4j
-            check_query = f"""
-            MATCH (seed:Paper {{paper_id: '{seed_id}'}})
-            MATCH (rec:Paper {{paper_id: '{rec_id}'}})
-            OPTIONAL MATCH (seed)-[:CITES]->(rec)
-            OPTIONAL MATCH (rec)-[:CITES]->(seed)
-            OPTIONAL MATCH (seed)-[:CITES]->(common:Paper)<-[:CITES]-(rec)
-            RETURN 
-                COUNT(DISTINCT CASE WHEN (seed)-[:CITES]->(rec) THEN 1 END) as is_cited_by_seed,
-                COUNT(DISTINCT CASE WHEN (rec)-[:CITES]->(seed) THEN 1 END) as cites_seed,
-                COUNT(DISTINCT common) as cocited_count
-            """
-            result = recommender.graph_db.run(check_query).data()[0]
-            
-            if result['is_cited_by_seed'] > 0:
-                sem_cited_by += 1
-            if result['cites_seed'] > 0:
-                sem_cites += 1
-            if result['cocited_count'] > 0:
-                sem_cocited += 1
-        
-        sem_direct = sem_cited_by + sem_cites
-        sem_total = sem_direct + sem_cocited
-        sem_citation_ratio = sem_direct / len(semantic_recs)
-        sem_graph_ratio = sem_total / len(semantic_recs)
-        
-        print(f"     Papers cited by seed:       {sem_cited_by}/{len(semantic_recs)}")
-        print(f"     Papers citing seed:         {sem_cites}/{len(semantic_recs)}")
-        print(f"     Papers with co-citations:   {sem_cocited}/{len(semantic_recs)}")
-        print(f"     Direct citations:           {sem_direct}/{len(semantic_recs)} ({sem_citation_ratio:.1%})")
-        print(f"     Total graph-related:        {sem_total}/{len(semantic_recs)} ({sem_graph_ratio:.1%})")
-        
-        print(f"\n   📈 Collaborative vs Semantic Comparison:")
-        print(f"     Direct citation improvement:  {citation_ratio:.1%} vs {sem_citation_ratio:.1%} ({(citation_ratio - sem_citation_ratio)*100:+.1f} pp)")
-        print(f"     Total graph improvement:      {graph_ratio:.1%} vs {sem_graph_ratio:.1%} ({(graph_ratio - sem_graph_ratio)*100:+.1f} pp)")
+        try:
+            # Use seed paper title+abstract as the semantic query for fair comparison
+            seed_meta = recommender.get_paper_metadata([seed_id]).get(str(seed_id), {})
+            query_text = (seed_meta.get('title', '') or '') + ' ' + (seed_meta.get('abstract', '') or '')
+            if not query_text.strip():
+                # Fallback to seed ID string if no text available
+                query_text = str(seed_id)
+
+            semantic_recs = recommender.content_based_paper_recommendation(query_text, top_k=20)
+
+            if not semantic_recs:
+                print("   ⚠️ Semantic baseline returned no recommendations - skipping semantic comparison")
+                sem_citation_ratio = 0.0
+                sem_graph_ratio = 0.0
+            else:
+                # Check citation coverage for semantic method
+                sem_cited_by = 0
+                sem_cites = 0
+                sem_cocited = 0
+
+                for rec in semantic_recs:
+                    rec_id = rec['paper_id']
+                    # Check actual citations in Neo4j
+                    check_query = f"""
+                    MATCH (seed:Paper {{paper_id: '{seed_id}'}})
+                    MATCH (rec:Paper {{paper_id: '{rec_id}'}})
+                    OPTIONAL MATCH (seed)-[:CITES]->(rec)
+                    OPTIONAL MATCH (rec)-[:CITES]->(seed)
+                    OPTIONAL MATCH (seed)-[:CITES]->(common:Paper)<-[:CITES]-(rec)
+                    RETURN 
+                        COUNT(DISTINCT CASE WHEN (seed)-[:CITES]->(rec) THEN 1 END) as is_cited_by_seed,
+                        COUNT(DISTINCT CASE WHEN (rec)-[:CITES]->(seed) THEN 1 END) as cites_seed,
+                        COUNT(DISTINCT common) as cocited_count
+                    """
+                    result = recommender.graph_db.run(check_query).data()[0]
+
+                    if result.get('is_cited_by_seed', 0) > 0:
+                        sem_cited_by += 1
+                    if result.get('cites_seed', 0) > 0:
+                        sem_cites += 1
+                    if result.get('cocited_count', 0) > 0:
+                        sem_cocited += 1
+
+                sem_direct = sem_cited_by + sem_cites
+                sem_total = sem_direct + sem_cocited
+                sem_citation_ratio = sem_direct / len(semantic_recs)
+                sem_graph_ratio = sem_total / len(semantic_recs)
+
+                print(f"     Papers cited by seed:       {sem_cited_by}/{len(semantic_recs)}")
+                print(f"     Papers citing seed:         {sem_cites}/{len(semantic_recs)}")
+                print(f"     Papers with co-citations:   {sem_cocited}/{len(semantic_recs)}")
+                print(f"     Direct citations:           {sem_direct}/{len(semantic_recs)} ({sem_citation_ratio:.1%})")
+                print(f"     Total graph-related:        {sem_total}/{len(semantic_recs)} ({sem_graph_ratio:.1%})")
+
+                print(f"\n   📈 Collaborative vs Semantic Comparison:")
+                print(f"     Direct citation improvement:  {citation_ratio:.1%} vs {sem_citation_ratio:.1%} ({(citation_ratio - sem_citation_ratio)*100:+.1f} pp)")
+                print(f"     Total graph improvement:      {graph_ratio:.1%} vs {sem_graph_ratio:.1%} ({(graph_ratio - sem_graph_ratio)*100:+.1f} pp)")
+
+        except Exception as e:
+            print(f"   ⚠️ Failed to generate semantic baseline: {e}")
+            sem_citation_ratio = 0.0
+            sem_graph_ratio = 0.0
         
         # PASS criteria: At least 20% direct citations OR 40% graph-related
         if citation_ratio >= 0.2:
