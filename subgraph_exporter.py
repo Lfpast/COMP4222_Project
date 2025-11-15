@@ -332,9 +332,6 @@ if __name__ == "__main__":
         "international conference on learning representations",
         "icml",
         "international conference on machine learning"
-        "neurips",
-        "nips",
-        "neural information processing systems"
     ]
     
     # ---------------------
