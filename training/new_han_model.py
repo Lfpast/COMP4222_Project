@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 import json
 # --- NEW IMPORTS ---
 import dgl.dataloading
-import dgl.sampling
+# We will import dgl.sampling inside the function to handle versioning
 # --- END NEW IMPORTS ---
 
 class HANModel(nn.Module):
@@ -443,11 +443,29 @@ class GraphEmbeddingTrainer:
         
         # Create a negative sampler
         # For every 1 'cites' edge, create 5 'fake' (negative) edges
-        sampler = dgl.sampling.GlobalNegativeSampling(
-            g=graph, 
-            k=5, 
-            etype=cites_etype_tuple # Use the tuple
-        )
+        
+        # --- THIS IS THE FIX for AttributeError ---
+        # Handles DGL 0.8 vs 0.9+ API change
+        try:
+            # DGL 0.9+
+            import dgl.sampling
+            sampler = dgl.sampling.GlobalNegativeSampling(
+                g=graph, 
+                k=5, 
+                etype=cites_etype_tuple
+            )
+            print("   Using 'dgl.sampling.GlobalNegativeSampling' (DGL 0.9+)")
+        except (ImportError, AttributeError):
+            # DGL 0.8
+            print("   ⚠️  'dgl.sampling' not found. Falling back to 'dgl.dataloading.GlobalNegativeSampler'. (DGL 0.8)")
+            # Note the different name: GlobalNegativeSampler (not Sampling)
+            import dgl.dataloading
+            sampler = dgl.dataloading.GlobalNegativeSampler(
+                g=graph, 
+                k=5, 
+                etype=cites_etype_tuple
+            )
+        # --- END OF FIX ---
         
         # Create an EdgeDataLoader to iterate over batches of edges
         dataloader = dgl.dataloading.EdgeDataLoader(
@@ -600,7 +618,7 @@ if __name__ == "__main__":
         'SAVE_DIR': 'models/link_prediction_v1', # <-- New save dir
         'HIDDEN_DIM': 128,
         'OUT_DIM': 384,
-        'NUM_HEADS': 16
+        'NUM_HEADS': 8
     }
     # ===================== END DEBUG CONFIGURATION =================
 
@@ -672,4 +690,9 @@ if __name__ == "__main__":
         print(f"\n❌ Training failed: {e}")
         import traceback
         traceback.print_exc()
+        print("\n💡 Troubleshooting:")
+        print("   1. Check Neo4j is running and accessible (URI, user, password).")
+        print("   2. Ensure your focused dataset is imported and has 'CITES' links.")
+        print("   3. Install required packages: pip install torch dgl sentence-transformers py2neo")
+        print("   4. Reduce 'batch_size' in 'train_model' if you run out of memory (OOM).")
         exit(1)
