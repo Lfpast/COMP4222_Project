@@ -135,7 +135,9 @@ class GraphExporter:
                 query = """
                 MATCH (p:Paper)
                 WHERE p.paper_id IN $batch
-                RETURN p.paper_id, p.title, p.abstract, p.year, p.venue, p.n_citation
+                RETURN p.paper_id AS paper_id, p.title AS title, 
+                       p.abstract AS abstract, p.year AS year, 
+                       p.venue AS venue, p.n_citation AS n_citation
                 """
                 results = self.graph.run(query, batch=batch).data()
                 paper_df_list.append(pd.DataFrame(results))
@@ -156,7 +158,7 @@ class GraphExporter:
                 query = """
                 MATCH (p:Paper)-[:WRITTEN_BY]->(a:Author)
                 WHERE p.paper_id IN $batch
-                RETURN DISTINCT a.author_id, a.name, a.org
+                RETURN DISTINCT a.author_id AS author_id, a.name AS name, a.org AS org
                 """
                 results = self.graph.run(query, batch=batch).data()
                 batch_df = pd.DataFrame(results)
@@ -180,7 +182,7 @@ class GraphExporter:
                 query = """
                 MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
                 WHERE p.paper_id IN $batch
-                RETURN DISTINCT k.keyword_id, k.keyword
+                RETURN DISTINCT k.keyword_id AS keyword_id, k.keyword AS keyword
                 """
                 results = self.graph.run(query, batch=batch).data()
                 batch_df = pd.DataFrame(results)
@@ -218,7 +220,7 @@ class GraphExporter:
                 query = """
                 MATCH (p:Paper)-[r:WRITTEN_BY]->(a:Author)
                 WHERE p.paper_id IN $batch
-                RETURN p.paper_id, a.author_id, r.author_order
+                RETURN p.paper_id AS paper_id, a.author_id AS author_id, r.author_order AS author_order
                 """
                 results = self.graph.run(query, batch=batch).data()
                 rels_list.extend(results)
@@ -239,7 +241,7 @@ class GraphExporter:
                 query = """
                 MATCH (p:Paper)-[r:HAS_KEYWORD]->(k:Keyword)
                 WHERE p.paper_id IN $batch
-                RETURN p.paper_id, k.keyword_id
+                RETURN p.paper_id AS paper_id, k.keyword_id AS keyword_id
                 """
                 results = self.graph.run(query, batch=batch).data()
                 rels_list.extend(results)
