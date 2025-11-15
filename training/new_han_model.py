@@ -46,10 +46,9 @@ class HANModel(nn.Module):
     def forward(self, graph, inputs, apply_batchnorm=True):
         h = inputs
         
-        # --- THE FIX: Part 1 ---
-        # Store the original SBERT embeddings to add back later
-        initial_inputs = inputs
-        # --- END OF FIX ---
+        # --- IMPROVED RESIDUAL CONNECTION ---
+        # Store a COPY of the original SBERT embeddings (already normalized)
+        initial_inputs = {k: v.clone() for k, v in inputs.items()}
         
         for i, layer in enumerate(self.layers):
             h = layer(graph, h)
@@ -62,23 +61,28 @@ class HANModel(nn.Module):
         # This is the "graph signal"
         h_graph = {k: self.output_projection(v) for k, v in h.items()}
         
-        # --- THE FIX: Part 2 ---
-        # v_final = v_initial (SBERT) + v_graph (HAN)
+        # --- CRITICAL FIX: Normalize graph signal BEFORE residual connection ---
+        # Without this, h_graph can be very large (norm=20-50), which dominates
+        # the residual connection and destroys semantic information
+        h_graph_normalized = {k: F.normalize(v, p=2, dim=1) for k, v in h_graph.items()}
+        
+        # Residual connection: original (norm=1) + graph_signal (norm=1)
+        # Both are unit vectors, so the result has norm ≈ √2 ≈ 1.41
         h_final = {}
-        for k in h_graph.keys():
+        for k in h_graph_normalized.keys():
             if k in initial_inputs:
-                # Add the original SBERT vector back in.
-                # This preserves the original semantic meaning.
-                h_final[k] = initial_inputs[k] + h_graph[k]
+                # Combine: semantic (SBERT) + structural (HAN)
+                # Scale factor to balance: 0.7 * semantic + 0.3 * structural
+                h_final[k] = 0.7 * initial_inputs[k] + 0.3 * h_graph_normalized[k]
+                # Then normalize again to unit length
+                h_final[k] = F.normalize(h_final[k], p=2, dim=1)
             else:
-                # For other node types, just use the graph signal
-                h_final[k] = h_graph[k]
+                # For other node types, just use normalized graph signal
+                h_final[k] = h_graph_normalized[k]
         # --- END OF FIX ---
 
-        # Apply batch normalization
-        # Note: We apply BN during training *before* the loss
+        # Apply batch normalization (optional, usually not needed after normalization)
         if apply_batchnorm and self.training:
-            # Apply batchnorm to the *final* residual-connected embedding
             h_final = {k: self.batch_norms[k](v) if k in self.batch_norms else v 
                        for k, v in h_final.items()}
         
@@ -407,6 +411,9 @@ class GraphEmbeddingTrainer:
         print("\nStep 3: Preparing node features...")
         node_features = self.prepare_node_features(data_dict)
         
+        # 保存原始特征的深拷贝（用于保存到模型文件）
+        original_features_copy = {k: v.clone() for k, v in node_features.items()}
+        
         cites_etype_tuple = ('paper', 'cites', 'paper')
 
         # Ensure 'cites' edge type exists for link prediction
@@ -571,13 +578,24 @@ class GraphEmbeddingTrainer:
         model.eval()
         with torch.no_grad():
             # Run a final forward pass to get embeddings *without* batchnorm update
+            # Note: forward() now returns already-normalized embeddings (norm=1)
             final_embeddings = model(graph, node_features, apply_batchnorm=False)
-            final_embeddings = {k: v.cpu() for k, v in final_embeddings.items()}
+            
+            # Verify normalization and move to CPU
+            print("\n   Verifying embedding normalization...")
+            final_embeddings_cpu = {}
+            for k, v in final_embeddings.items():
+                norms = torch.norm(v, dim=1)
+                print(f"   {k}: norm mean={norms.mean():.4f}, std={norms.std():.6f}")
+                final_embeddings_cpu[k] = v.cpu()
+            
+            final_embeddings = final_embeddings_cpu
         
         # Save model file
         save_data = {
             'model_state_dict': model.state_dict(),
-            'embeddings': final_embeddings,
+            'embeddings': final_embeddings,  # HAN embeddings (70% semantic + 30% structural, normalized)
+            'original_embeddings': {k: v.cpu() for k, v in original_features_copy.items()},  # Pure Sentence-BERT embeddings
             'id_maps': {
                 'paper': paper_id_map,
                 'author': author_id_map,
@@ -621,7 +639,7 @@ if __name__ == "__main__":
         'SAMPLE_SIZE': None,           # <-- Set to None to use your whole focused DB
         'EPOCHS': 50,                  # <-- Start with 50-100 epochs
         'LEARNING_RATE': 0.001,
-        'SAVE_DIR': 'models/link_prediction_v1', # <-- New save dir
+        'SAVE_DIR': 'models/link_prediction_v3', # <-- New save dir
         'HIDDEN_DIM': 128,
         'OUT_DIM': 384,
         'NUM_HEADS': 8

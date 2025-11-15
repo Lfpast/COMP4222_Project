@@ -208,6 +208,14 @@ class HybridRecommender:
         structural_scores = {pid: score for pid, score in structural_results}
         print(f"   ✓ Found {len(structural_results)} structural matches")
         
+        # DEBUG: 打印structural结果的paper_id类型和示例
+        if structural_results:
+            sample_struct_id = structural_results[0][0]
+            print(f"   DEBUG: Structural paper_id type: {type(sample_struct_id)}, example: {sample_struct_id}")
+        if semantic_results:
+            sample_sem_id = semantic_results[0][0]
+            print(f"   DEBUG: Semantic paper_id type: {type(sample_sem_id)}, example: {sample_sem_id}")
+        
         # 3. 合并结果
         print("[3/3] Combining results...")
         all_paper_ids = set(semantic_scores.keys()) | set(structural_scores.keys())
@@ -316,7 +324,7 @@ def main():
     """主函数：演示混合推荐系统"""
     
     # 配置
-    MODEL_PATH = "../training/models/improved_han_v1/han_embeddings.pth"
+    MODEL_PATH = "../training/models/link_prediction_v3/han_embeddings.pth"
     NEO4J_URI = "neo4j://127.0.0.1:7687"
     NEO4J_USER = "neo4j"
     NEO4J_PASSWORD = "12345678"
