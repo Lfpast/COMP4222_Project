@@ -596,7 +596,7 @@ if __name__ == "__main__":
         'SAVE_DIR': 'models/link_prediction_v1', # <-- New save dir
         'HIDDEN_DIM': 128,
         'OUT_DIM': 384,
-        'NUM_HEADS': 8
+        'NUM_HEADS': 16
     }
     # ===================== END DEBUG CONFIGURATION =================
 
@@ -669,9 +669,4 @@ if __name__ == "__main__":
         print(f"\n❌ Training failed: {e}")
         import traceback
         traceback.print_exc()
-        print("\n💡 Troubleshooting:")
-        print("   1. Check Neo4j is running and accessible (URI, user, password).")
-        print("   2. Ensure your focused dataset is imported and has 'CITES' links.")
-        print("   3. Install required packages: pip install torch dgl sentence-transformers py2neo")
-        print("   4. Reduce SAMPLE_SIZE if you run out of memory (OOM).")
         exit(1)

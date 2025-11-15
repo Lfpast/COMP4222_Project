@@ -25,10 +25,7 @@ class Neo4jGraphBuilder:
             raise
         
         # Set data directory based on dataset type
-        if dataset_type == "combined":
-            self.data_dir = "data/processed"
-        else:
-            self.data_dir = f"data/processed/{dataset_type}"
+        self.data_dir = f"data/{dataset_type}"
         
     def clear_database(self):
         """Clear existing data with batching to avoid memory issues"""
@@ -307,19 +304,9 @@ if __name__ == "__main__":
     # Check command line argument
     if len(sys.argv) > 1:
         dataset_type = sys.argv[1].lower()
-        if dataset_type not in ["train", "test", "combined"]:
-            print("Error: dataset_type must be 'train', 'test', or 'combined'")
-            print("Usage: python neo4j_import.py [train|test|combined]")
-            sys.exit(1)
-    else:
-        dataset_type = "combined"
     
     print(f"\n📊 Dataset: {dataset_type.upper()}")
-    
-    if dataset_type == "combined":
-        data_dir = "data/processed"
-    else:
-        data_dir = f"data/processed/{dataset_type}"
+    data_dir = "data"
     
     print(f"📁 Data directory: {data_dir}/")
     
@@ -335,14 +322,7 @@ if __name__ == "__main__":
 
     NEO4J_URI = f"neo4j://127.0.0.1:7687"
     NEO4J_USERNAME = "neo4j"  # Default username
-    
-    # Set password based on dataset type
-    if dataset_type == "train":
-        NEO4J_PASSWORD = "87654321"
-    elif dataset_type == "test":
-        NEO4J_PASSWORD = "12345678"
-    else:  # combined
-        NEO4J_PASSWORD = "12345678"  # Default password
+    NEO4J_PASSWORD = "12345678"
     
     print(f"\n⚙️  Configuration:")
     print(f"   URI: {NEO4J_URI}")
@@ -388,9 +368,4 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"\n❌ Import failed: {e}")
-        print("\n💡 Troubleshooting:")
-        print("   1. Check Neo4j is running: neo4j status")
-        print("   2. Verify connection settings (URI, username, password)")
-        print("   3. Check CSV files exist in data/processed/")
-        print("   4. Ensure sufficient memory for large dataset")
         exit(1)
