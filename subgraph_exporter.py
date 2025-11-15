@@ -355,22 +355,7 @@ if __name__ == "__main__":
         
         exporter.run_export(SEED_VENUE_LIST, SEED_YEARS)
         
-        print("\n" + "=" * 70)
-        print("🎉 NEXT STEPS")
-        print("=" * 70)
-        print("   1. Open your 'neo4j_import.py' script.")
-        print("   2. In the '__main__' block, change 'dataset_type' to 'focused_v1'")
-        print("      (or change the 'data_dir' variable to 'data/focused_v1').")
-        print("   3. Run 'neo4j_import.py' to clear your database and import")
-        print("      this new, focused dataset.")
-        print("   4. Run 'han_model.py' (with the new Link Prediction logic) to")
-        print("      train on this new dataset.")
-        
     except Exception as e:
         print(f"\n❌ Export failed: {e}")
         import traceback
         traceback.print_exc()
-        print("\n💡 Troubleshooting:")
-        print("   1. Is your 2-million paper Neo4j database running?")
-        print("   2. Is the password correct?")
-        print("   3. Do you have enough disk space to write the CSVs?")
