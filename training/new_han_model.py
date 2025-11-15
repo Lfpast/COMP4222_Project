@@ -440,34 +440,20 @@ class GraphEmbeddingTrainer:
         paper_cites_eids = torch.arange(num_cites_edges, device=self.device)
         
         
-        # --- ROBUST FIX for DGL Versioning ---
-        # We will try multiple known locations for the negative sampler
+        # --- DGL 1.1.2 Compatible Implementation ---
+        # In DGL 1.1.x, we don't use EdgeDataLoader, instead we manually batch the edges
         
-        print("   Checking for DGL negative sampler...")
+        print("   ✅ Using manual batching for DGL 1.1.2 compatibility")
         
-        # --- FIX: REMOVED all old sampler logic ---
-        # The sampler object is no longer passed to the dataloader.
-        # We will call the sampling function manually inside the loop.
-        print("   ✅ Using manual negative sampling with 'dgl.sampling.global_uniform_negative_sampling'.")
+        # Create batches manually
+        batch_size = 1024
+        num_batches = (num_cites_edges + batch_size - 1) // batch_size
         
-        # --- END OF FIX ---
-        
-        
-        # Create an EdgeDataLoader to iterate over batches of edges
-        # --- FIX: Removed the 'sampler' argument ---
-        dataloader = dgl.dataloading.EdgeDataLoader(
-            graph, 
-            {cites_etype_tuple: paper_cites_eids}, # Use the tuple
-            # sampler,  <-- THIS ARGUMENT IS REMOVED
-            batch_size=1024,
-            shuffle=True,
-            drop_last=False,
-            pin_memory=True,
-            num_workers=0  # Set to 0 for Windows/macOS compatibility, >0 for Linux
-        )
+        # Shuffle edge IDs
+        shuffled_eids = paper_cites_eids[torch.randperm(num_cites_edges)]
         
         print(f"\nStep 6: Training for {epochs} epochs using {len(paper_cites_eids)} 'cites' edges...")
-        print(f"   Batch size: 1024, Negative samples per edge: 5")
+        print(f"   Batch size: {batch_size}, Negative samples per edge: 5, Batches per epoch: {num_batches}")
         print("=" * 70 + "\n")
         
         model.train()
@@ -480,73 +466,63 @@ class GraphEmbeddingTrainer:
             epoch_start = time.time()
             total_loss = 0
             
-            pbar = tqdm(dataloader, 
+            # Shuffle edges at the start of each epoch
+            shuffled_eids = paper_cites_eids[torch.randperm(num_cites_edges)]
+            
+            pbar = tqdm(range(num_batches), 
                        desc=f"Epoch {epoch+1}/{epochs}", 
                        ncols=100,
                        dynamic_ncols=True)
             
-            # Since our HANModel is a full-graph model, we run it once per epoch
-            # This is less efficient than subgraph sampling, but correct for this model
-            embeddings = model(graph, node_features)
-            
-            # --- FIX: Loop signature changed. 'negative_graph' is no longer provided. ---
-            for input_nodes, positive_graph, blocks in pbar:
-                # input_nodes: All nodes needed for computation
-                # positive_graph: A graph with only the "real" edges for this batch
-                # blocks: Subgraphs for sampled GNN (we ignore this, using full-graph)
+            for batch_idx in pbar:
+                # Compute embeddings for this batch (creates a new computation graph)
+                embeddings = model(graph, node_features)
                 
-                # Move graphs to device
-                positive_graph = positive_graph.to(self.device)
+                # Get batch of edge IDs
+                start_idx = batch_idx * batch_size
+                end_idx = min(start_idx + batch_size, num_cites_edges)
+                batch_eids = shuffled_eids[start_idx:end_idx]
                 
-                # 1. Calculate scores for positive and negative edges
-                # Pass the *full* embeddings tensor to the predictor
+                # Get source and destination nodes for this batch
+                src, dst = graph.find_edges(batch_eids, etype=cites_etype_tuple)
                 
-                # Score the "real" edges
-                pos_score = predictor(positive_graph, embeddings, ntype='paper')
-                
-                # --- FIX: Manually create the negative graph ---
-                
-                # 1. Define negative sampling parameters
-                k = 5 # Number of negative samples per positive edge
-                num_pos_edges = positive_graph.num_edges()
-                cites_etype_id = graph.get_etype_id('cites')
-                
-                # 2. Call the *correct* sampling function
-                neg_srcdst = dgl.sampling.global_uniform_negative_sampling(
-                    graph, 
-                    num_pos_edges * k, 
-                    cites_etype_id,
-                )
-                
-                # 3. Create the negative graph
-                negative_graph = dgl.heterograph(
-                    {cites_etype_tuple: neg_srcdst},
+                # Create positive graph for this batch
+                positive_graph = dgl.heterograph(
+                    {cites_etype_tuple: (src, dst)},
                     num_nodes_dict={'paper': graph.num_nodes('paper')}
                 ).to(self.device)
-
-                # 4. Score the "fake" edges
+                
+                # Score the positive edges
+                pos_score = predictor(positive_graph, embeddings, ntype='paper')
+                
+                # Generate negative samples
+                k = 5  # Number of negative samples per positive edge
+                num_pos_edges = len(batch_eids)
+                
+                # For DGL 1.1.2, use uniform negative sampling
+                neg_src = src.repeat_interleave(k)
+                neg_dst = torch.randint(0, graph.num_nodes('paper'), (num_pos_edges * k,), device=self.device)
+                
+                # Create negative graph
+                negative_graph = dgl.heterograph(
+                    {cites_etype_tuple: (neg_src, neg_dst)},
+                    num_nodes_dict={'paper': graph.num_nodes('paper')}
+                ).to(self.device)
+                
+                # Score the negative edges
                 neg_score = predictor(negative_graph, embeddings, ntype='paper')
                 
-                # --- END OF FIX ---
-                
-                
-                # 2. Calculate Loss
-                # We want pos_score to be > neg_score. The target 'y' is a tensor of 1s.
+                # Calculate Loss
                 y = torch.ones_like(pos_score)
                 
-                # MarginRankingLoss: loss(pos_score, neg_score, y)
-                # Tries to make: pos_score - neg_score > margin
-                # We need to ensure neg_score has the same length as pos_score
-                # Sampler gives k=5 negatives, so we must reshape
-                
                 # Reshape neg_score: [batch_size * k] -> [batch_size, k]
-                neg_score_k = neg_score.view(-1, 5)
-                # Average the scores of the 5 negative samples
+                neg_score_k = neg_score.view(-1, k)
+                # Average the scores of the k negative samples
                 neg_score_mean = neg_score_k.mean(1)
                 
                 loss = loss_fn(pos_score, neg_score_mean, y)
                 
-                # 3. Backward pass and optimization
+                # Backward pass and optimization
                 optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -556,7 +532,7 @@ class GraphEmbeddingTrainer:
                 pbar.set_postfix({'Loss': f'{loss.item():.4f}'})
             
             # End of epoch
-            avg_loss = total_loss / len(dataloader)
+            avg_loss = total_loss / num_batches
             epoch_time = time.time() - epoch_start
             training_history.append(avg_loss)
             
@@ -699,9 +675,4 @@ if __name__ == "__main__":
         print(f"\n❌ Training failed: {e}")
         import traceback
         traceback.print_exc()
-        print("\n💡 Troubleshooting:")
-        print("   1. Check Neo4j is running and accessible (URI, user, password).")
-        print("   2. Ensure your focused dataset is imported and has 'CITES' links.")
-        print("   3. Install required packages: pip install torch dgl sentence-transformers py2neo")
-        print("   4. Reduce 'batch_size' in 'train_model' if you run out of memory (OOM).")
         exit(1)
