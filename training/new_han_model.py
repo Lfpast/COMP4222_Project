@@ -454,17 +454,18 @@ class GraphEmbeddingTrainer:
         
         
         # Create an EdgeDataLoader to iterate over batches of edges
-        # --- FIX: Removed the 'sampler' argument ---
-        dataloader = dgl.dataloading.EdgeDataLoader(
-            graph, 
-            {cites_etype_tuple: paper_cites_eids}, # Use the tuple
-            # sampler,  <-- THIS ARGUMENT IS REMOVED
+        # --- FIX: Replaced EdgeDataLoader with the correct DataLoader ---
+        dataloader = dgl.dataloading.DataLoader(
+            graph,                             # 1st arg: The graph
+            {cites_etype_tuple: paper_cites_eids}, # 2nd arg: The EIDs to iterate over
+            None,                              # 3rd arg: The item sampler (None for default)
             batch_size=1024,
             shuffle=True,
             drop_last=False,
             pin_memory=True,
             num_workers=0  # Set to 0 for Windows/macOS compatibility, >0 for Linux
         )
+        # --- END OF FIX ---
         
         print(f"\nStep 6: Training for {epochs} epochs using {len(paper_cites_eids)} 'cites' edges...")
         print(f"   Batch size: 1024, Negative samples per edge: 5")
@@ -490,6 +491,7 @@ class GraphEmbeddingTrainer:
             embeddings = model(graph, node_features)
             
             # --- FIX: Loop signature changed. 'negative_graph' is no longer provided. ---
+            # The new DataLoader provides (input_nodes, positive_graph, blocks)
             for input_nodes, positive_graph, blocks in pbar:
                 # input_nodes: All nodes needed for computation
                 # positive_graph: A graph with only the "real" edges for this batch
