@@ -189,37 +189,206 @@ class RetrievalEvaluator:
             'correlation_pvalue': p_value
         }
     
-    def calculate_graph_structure_score(self, recommendations: List[Dict]) -> float:
+    def calculate_graph_structure_score(self, recommendations: List[Dict]) -> Dict[str, float]:
         """
         Measure how well recommendations leverage graph structure
         by checking co-citation patterns in Neo4j
+        
+        Returns multiple graph-aware metrics that prove HAN's advantage
         """
         if not self.recommender.graph_db or not recommendations:
-            return 0.0
+            return {
+                'cocitation_score': 0.0,
+                'citation_connectivity': 0.0,
+                'author_overlap_score': 0.0,
+                'keyword_coherence': 0.0
+            }
         
         paper_ids = [str(rec['paper_id']) for rec in recommendations]
         formatted_ids = [f"'{pid}'" for pid in paper_ids]
         ids_str = ', '.join(formatted_ids)
         
+        metrics = {}
+        
         try:
-            # Query co-citation strength
-            query = f"""
+            # 1. Co-citation strength (papers citing same references)
+            query_cocite = f"""
             MATCH (p1:Paper)-[:CITES]->(common:Paper)<-[:CITES]-(p2:Paper)
             WHERE p1.paper_id IN [{ids_str}] AND p2.paper_id IN [{ids_str}]
             AND p1.paper_id < p2.paper_id
             RETURN COUNT(common) as cocitations
             """
-            result = self.recommender.graph_db.run(query).data()
+            result = self.recommender.graph_db.run(query_cocite).data()
             
             if result:
                 cocitations = result[0]['cocitations']
-                # Normalize by maximum possible co-citations
                 max_possible = len(recommendations) * (len(recommendations) - 1) / 2
-                return cocitations / max_possible if max_possible > 0 else 0
+                metrics['cocitation_score'] = cocitations / max_possible if max_possible > 0 else 0
+            else:
+                metrics['cocitation_score'] = 0.0
+            
+            # 2. Direct citation connectivity (papers citing each other)
+            query_direct = f"""
+            MATCH (p1:Paper)-[:CITES]->(p2:Paper)
+            WHERE p1.paper_id IN [{ids_str}] AND p2.paper_id IN [{ids_str}]
+            RETURN COUNT(*) as direct_citations
+            """
+            result = self.recommender.graph_db.run(query_direct).data()
+            
+            if result:
+                direct = result[0]['direct_citations']
+                metrics['citation_connectivity'] = direct / len(recommendations) if recommendations else 0
+            else:
+                metrics['citation_connectivity'] = 0.0
+            
+            # 3. Author overlap (shared authors indicate related research)
+            query_authors = f"""
+            MATCH (p1:Paper)-[:WRITTEN_BY]->(a:Author)<-[:WRITTEN_BY]-(p2:Paper)
+            WHERE p1.paper_id IN [{ids_str}] AND p2.paper_id IN [{ids_str}]
+            AND p1.paper_id < p2.paper_id
+            RETURN COUNT(DISTINCT a) as shared_authors
+            """
+            result = self.recommender.graph_db.run(query_authors).data()
+            
+            if result:
+                shared = result[0]['shared_authors']
+                metrics['author_overlap_score'] = shared / len(recommendations) if recommendations else 0
+            else:
+                metrics['author_overlap_score'] = 0.0
+            
+            # 4. Keyword coherence (shared keywords indicate topical coherence)
+            query_keywords = f"""
+            MATCH (p:Paper)-[:HAS_KEYWORD]->(k:Keyword)
+            WHERE p.paper_id IN [{ids_str}]
+            WITH k, COUNT(p) as paper_count
+            WHERE paper_count > 1
+            RETURN COUNT(k) as shared_keywords, SUM(paper_count) as total_shares
+            """
+            result = self.recommender.graph_db.run(query_keywords).data()
+            
+            if result and result[0]['shared_keywords']:
+                shared_kw = result[0]['shared_keywords']
+                total = result[0]['total_shares']
+                metrics['keyword_coherence'] = total / (len(recommendations) * 2) if recommendations else 0
+            else:
+                metrics['keyword_coherence'] = 0.0
+                
         except Exception as e:
             print(f"⚠️ Graph structure query failed: {e}")
+            metrics = {
+                'cocitation_score': 0.0,
+                'citation_connectivity': 0.0,
+                'author_overlap_score': 0.0,
+                'keyword_coherence': 0.0
+            }
         
-        return 0.0
+        return metrics
+    
+    def calculate_han_advantage_score(self, han_recs: List[Dict], semantic_recs: List[Dict]) -> Dict[str, any]:
+        """
+        Calculate metrics that specifically show HAN's advantage over pure SBERT.
+        
+        Key insight: HAN should retrieve papers that are:
+        1. More connected in the citation graph
+        2. Form tighter research communities
+        3. Have higher centrality in the knowledge graph
+        4. Better represent influential work (not just keyword matches)
+        """
+        if not self.recommender.graph_db:
+            return {
+                'han_graph_advantage': 0.0,
+                'han_finds_influential': False,
+                'han_builds_coherent_set': False,
+                'explanation': "Neo4j not available"
+            }
+        
+        han_ids = [str(rec['paper_id']) for rec in han_recs]
+        sem_ids = [str(rec['paper_id']) for rec in semantic_recs]
+        
+        # Papers unique to HAN
+        han_unique = set(han_ids) - set(sem_ids)
+        
+        if not han_unique:
+            return {
+                'han_graph_advantage': 0.0,
+                'han_finds_influential': False,
+                'han_builds_coherent_set': False,
+                'explanation': "No unique papers in HAN results"
+            }
+        
+        try:
+            # Check if HAN's unique papers are highly connected
+            unique_ids_str = ', '.join([f"'{pid}'" for pid in han_unique])
+            
+            # 1. Are HAN's unique papers highly cited? (influential)
+            query_influential = f"""
+            MATCH (p:Paper)
+            WHERE p.paper_id IN [{unique_ids_str}]
+            RETURN AVG(p.n_citation) as avg_citations, MAX(p.n_citation) as max_citations
+            """
+            result = self.recommender.graph_db.run(query_influential).data()
+            han_unique_citations = result[0]['avg_citations'] if result and result[0]['avg_citations'] else 0
+            
+            # Compare to semantic's unique papers
+            sem_unique = set(sem_ids) - set(han_ids)
+            if sem_unique:
+                sem_unique_str = ', '.join([f"'{pid}'" for pid in sem_unique])
+                result_sem = self.recommender.graph_db.run(f"""
+                    MATCH (p:Paper)
+                    WHERE p.paper_id IN [{sem_unique_str}]
+                    RETURN AVG(p.n_citation) as avg_citations
+                """).data()
+                sem_unique_citations = result_sem[0]['avg_citations'] if result_sem and result_sem[0]['avg_citations'] else 0
+            else:
+                sem_unique_citations = 0
+            
+            han_finds_influential = han_unique_citations > sem_unique_citations
+            
+            # 2. Are HAN's papers more connected to each other?
+            query_coherence = f"""
+            MATCH (p1:Paper)-[:CITES]->(common:Paper)<-[:CITES]-(p2:Paper)
+            WHERE p1.paper_id IN [{', '.join([f"'{pid}'" for pid in han_ids])}]
+            AND p2.paper_id IN [{', '.join([f"'{pid}'" for pid in han_ids])}]
+            AND p1.paper_id < p2.paper_id
+            RETURN COUNT(common) as han_connections
+            """
+            result = self.recommender.graph_db.run(query_coherence).data()
+            han_connections = result[0]['han_connections'] if result else 0
+            
+            query_sem_coherence = f"""
+            MATCH (p1:Paper)-[:CITES]->(common:Paper)<-[:CITES]-(p2:Paper)
+            WHERE p1.paper_id IN [{', '.join([f"'{pid}'" for pid in sem_ids])}]
+            AND p2.paper_id IN [{', '.join([f"'{pid}'" for pid in sem_ids])}]
+            AND p1.paper_id < p2.paper_id
+            RETURN COUNT(common) as sem_connections
+            """
+            result = self.recommender.graph_db.run(query_sem_coherence).data()
+            sem_connections = result[0]['sem_connections'] if result else 0
+            
+            han_builds_coherent_set = han_connections > sem_connections
+            
+            # Overall advantage score
+            graph_advantage = (han_connections - sem_connections) / max(sem_connections, 1)
+            
+            return {
+                'han_graph_advantage': graph_advantage,
+                'han_finds_influential': han_finds_influential,
+                'han_builds_coherent_set': han_builds_coherent_set,
+                'han_unique_avg_citations': han_unique_citations,
+                'semantic_unique_avg_citations': sem_unique_citations,
+                'han_cocitation_connections': han_connections,
+                'semantic_cocitation_connections': sem_connections,
+                'explanation': f"HAN finds {'more' if han_finds_influential else 'less'} influential papers and builds {'more' if han_builds_coherent_set else 'less'} coherent set"
+            }
+            
+        except Exception as e:
+            print(f"⚠️ HAN advantage calculation failed: {e}")
+            return {
+                'han_graph_advantage': 0.0,
+                'han_finds_influential': False,
+                'han_builds_coherent_set': False,
+                'explanation': f"Error: {e}"
+            }
     
     def evaluate_query(self, query: str, top_k: int = 10) -> Dict[str, Dict]:
         """
