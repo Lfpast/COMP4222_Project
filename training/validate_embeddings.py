@@ -561,7 +561,7 @@ def main():
     if len(sys.argv) > 1:
         model_path = sys.argv[1]
     else:
-        model_path = 'models/trial1/han_embeddings.pth'
+        model_path = 'models/link_prediction_v1/han_embeddings.pth'
     
     print(f"\n{'='*70}")
     print("🎯 HAN Model Evaluation")

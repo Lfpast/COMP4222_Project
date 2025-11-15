@@ -90,14 +90,16 @@ class AcademicRecommender:
             # 最后尝试直接 load（让 torch 抛出更详细异常）
             checkpoint = torch.load(model_path, map_location=self.device)
 
-        self.embeddings = checkpoint['embeddings']
+        self.embeddings = checkpoint['embeddings']  # HAN-trained embeddings
+        self.original_embeddings = checkpoint.get('original_embeddings', checkpoint['embeddings'])  # Fallback to HAN if not available
         self.id_maps = checkpoint['id_maps']
         self.config = checkpoint.get('config', {})
 
         # 预填充 numpy 缓存（延迟转换：只缓存存在的类型）
-        for ntype in self.embeddings.keys():
+        # Use ORIGINAL embeddings for semantic search
+        for ntype in self.original_embeddings.keys():
             try:
-                arr = self.embeddings[ntype]
+                arr = self.original_embeddings[ntype]
                 # 支持 torch.Tensor 或 numpy.ndarray
                 if hasattr(arr, 'numpy'):
                     self._emb_np_cache[ntype] = arr.cpu().numpy()
@@ -110,15 +112,40 @@ class AcademicRecommender:
                 # 忽略不支持的类型，按需生成
                 pass
 
-        print(f"✅ Loaded embeddings from: {model_path}; types: {list(self.embeddings.keys())}")
+        # Also cache HAN embeddings separately if needed
+        self._han_emb_cache = {}
+        for ntype in self.embeddings.keys():
+            try:
+                arr = self.embeddings[ntype]
+                if hasattr(arr, 'numpy'):
+                    self._han_emb_cache[ntype] = arr.cpu().numpy()
+                elif isinstance(arr, np.ndarray):
+                    self._han_emb_cache[ntype] = arr
+                else:
+                    self._han_emb_cache[ntype] = np.array(arr)
+            except Exception:
+                pass
 
-    def _get_numpy_emb(self, node_type: str):
-        """返回指定 node_type 的 numpy 嵌入数组（缓存）"""
-        if node_type in self._emb_np_cache:
-            return self._emb_np_cache[node_type]
+        print(f"✅ Loaded embeddings from: {model_path}")
+        print(f"   Original (Sentence-BERT) types: {list(self.original_embeddings.keys())}")
+        print(f"   HAN-trained types: {list(self.embeddings.keys())}")
 
-        if node_type in self.embeddings:
-            arr = self.embeddings[node_type]
+    def _get_numpy_emb(self, node_type: str, use_original=True):
+        """返回指定 node_type 的 numpy 嵌入数组（缓存）
+        
+        Args:
+            node_type: 节点类型 ('paper', 'author', 'keyword')
+            use_original: True=使用原始Sentence-BERT嵌入（语义检索），False=使用HAN训练后的嵌入
+        """
+        # Choose the right cache
+        cache = self._emb_np_cache if use_original else self._han_emb_cache
+        embeddings_dict = self.original_embeddings if use_original else self.embeddings
+        
+        if node_type in cache:
+            return cache[node_type]
+
+        if node_type in embeddings_dict:
+            arr = embeddings_dict[node_type]
             if hasattr(arr, 'cpu') and hasattr(arr, 'numpy'):
                 try:
                     np_arr = arr.cpu().numpy()
@@ -127,7 +154,7 @@ class AcademicRecommender:
             else:
                 np_arr = np.array(arr)
 
-            self._emb_np_cache[node_type] = np_arr
+            cache[node_type] = np_arr
             return np_arr
 
         raise KeyError(f"Embedding for node type '{node_type}' not found")
@@ -273,7 +300,7 @@ class AcademicRecommender:
         return diversified[:top_k]
     
     def content_based_paper_recommendation(self, query_text: str, top_k: int = 10) -> List[Dict]:
-        """基于内容的论文推荐 - 改进投影方法"""
+        """基于内容的论文推荐 - 使用原始 Sentence-BERT embeddings"""
         print(f"📚 Content-based paper recommendation for: {query_text}")
         
         if self.sentence_model is None:
@@ -288,12 +315,13 @@ class AcademicRecommender:
             print(f"❌ Failed to encode query: {e}")
             return []
         
-        # 获取论文嵌入
-        if 'paper' not in self.embeddings:
+        # 获取论文嵌入 - USE ORIGINAL SENTENCE-BERT EMBEDDINGS
+        if 'paper' not in self.original_embeddings:
             print("❌ Paper embeddings not found")
             return []
-        paper_embeddings = self._get_numpy_emb('paper')
+        paper_embeddings = self._get_numpy_emb('paper', use_original=True)  # ← Key change!
         print(f"   Paper embeddings shape: {paper_embeddings.shape}")
+        print(f"   Using ORIGINAL Sentence-BERT embeddings for semantic search")
 
         # 改进的投影方法
         if query_embedding.shape[1] != paper_embeddings.shape[1]:
