@@ -52,3 +52,113 @@ Based on the provided context, the following three papers discuss graph neural n
 2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"**: This paper serves as a broad tutorial, covering the fundamental concepts, new research frontiers, and emerging applications of graph neural networks.
 3.  **"A Fair Comparison of Graph Neural Networks for Graph Classification"**: This paper focuses on the experimental evaluation and reproducibility of Graph Neural Network models, specifically in the context of graph classification tasks.
 ============================================================
+
+============================================================
+Mode: graph_enabled
+Query: What are the main papers about Graph Neural Networks in recommender systems?
+
+Based on the provided context, the main papers about Graph Neural Networks (GNNs) in recommender systems are as follows:
+
+1.  **"Sequential Recommendation Models: A Graph-based Perspective"** by Andreas Peintner. This paper outlines research into designing novel graph-based methods for sequential recommendation. It positions graph-based modeling of sequences as a state-of-the-art approach that introduces a structured, inductive bias into the recommendation learning framework, alongside transformer-based architectures.
+
+2.  **"Recommendation Based on Graph Neural Network with Structural Identity"** by Wentao Bai and Congying Guo. This work addresses a limitation of standard GNNs in recommendation, which is their focus on local "community information" and their inability to capture the "structural identity" or roles of nodes in the graph. The authors propose a model called SIGNN that captures both types of information to improve recommendation performance.
+
+3.  **"Graph Trend Filtering Networks for Recommendation"** by a team including Jiliang Tang, Wenqi Fan, and others. This paper investigates drawbacks in existing GNN-based recommender systems, such as non-adaptive propagation and non-robustness caused by uniformly treating all user-item interactions (including those from unreliable behaviors). The proposed solution, Graph Trend Filtering Networks (GTN), introduces a method to capture the adaptive reliability of interactions.
+
+The context also indicates that foundational or highly influential papers in this area, as co-cited by the papers above, include "Neural Collaborative Filtering," "Neural Graph Collaborative Filtering," and "KGAT: Knowledge Graph Attention Network for Recommendation."
+============================================================
+
+============================================================
+Mode: baseline
+Query: What are the main papers about Graph Neural Networks?
+
+Based solely on the provided context, the main papers about Graph Neural Networks (GNNs) appear to be comprehensive surveys and foundational tutorials that aim to structure and explain the field.
+
+The key papers are:
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"**: This paper provides a systematic and comprehensive review of GNNs, offering a novel taxonomy and classifying up to 327 relevant literatures to give readers a complete overview of the field.
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"**: This work serves as a broad tutorial, covering fundamental concepts, new research frontiers, and emerging applications of GNNs. It is also linked to a recently published book on the topic.
+3.  **"Computational Capabilities of Graph Neural Networks"**: This paper investigates the theoretical foundations of GNNs by characterizing the functions they can approximate. It establishes that GNNs possess a universal approximation property for most useful functions on graphs, similar to classic feedforward neural networks, with some limitations regarding graph symmetries.
+
+These three papers collectively cover the taxonomy, practical applications, and theoretical computational capabilities of Graph Neural Networks.
+============================================================
+
+============================================================
+Mode: graph_enabled_compare
+Query: What papers discuss graph neural networks?
+
+Based on the provided context, three papers explicitly discuss graph neural networks (GNNs):
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"** by Yu Zhou, Haixia Zheng, Xin Huang, Shufeng Hao, Dengao Li, and Jumin Zhao. This paper provides a systematic and comprehensive review of GNNs, including a novel taxonomy and a summary of future research directions.
+
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"** by Peng Cui, Jian Pei, Xiaojie Guo, and Liang Zhao. This work serves as a broad tutorial, covering the fundamental concepts, new research frontiers, and various applications of GNNs.
+
+3.  **"A Fair Comparison of Graph Neural Networks for Graph Classification"**. This paper focuses specifically on the experimental evaluation and reproducibility of GNN models for the task of graph classification, re-evaluating several popular models.
+============================================================
+
+============================================================
+Mode: baseline_compare
+Query: What papers discuss graph neural networks?
+
+Based on the provided context, three papers discuss graph neural networks (GNNs):
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"** (ID: 5fdb2c1591e0118a02c4f540). This paper provides a systematic and comprehensive review of GNNs, offering a novel taxonomy and summarizing future research directions.
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"** (ID: 630359fd90e50fcafd88ee59). This paper serves as a tutorial, covering the fundamental concepts, new research frontiers, and broad applications of GNNs.
+3.  **"A Fair Comparison of Graph Neural Networks for Graph Classification"** (ID: 5e00903b3a55ac51cdeb8128). This paper focuses on the experimental evaluation and reproducibility of GNNs, specifically in the context of graph classification tasks.
+============================================================
+
+============================================================
+Mode: graph_enabled
+Query: What are the main papers about Graph Neural Networks in recommender systems?
+
+Based on the provided context, the main papers about Graph Neural Networks (GNNs) in recommender systems are those that propose novel GNN-based methods to address specific limitations in the field.
+
+The primary papers are:
+
+1.  **"Sequential Recommendation Models: A Graph-based Perspective"** by Andreas Peintner. This paper outlines research into using graph-based modeling for sequential recommendation. It positions graph-based methods as state-of-the-art for introducing a structured, inductive bias to capture the sequential dependencies between items that traditional recommender systems often ignore.
+
+2.  **"Recommendation Based on Graph Neural Network with Structural Identity"** by Wentao Bai and Congying Guo. This paper introduces a model called SIGNN to address a key limitation of standard GNNs in recommendation. Standard GNNs primarily capture local "community information" from a node's neighbors but fail to capture the "structural identity" or the role of a node within the broader graph. SIGNN is designed to capture both types of information for improved performance.
+
+3.  **"Graph Trend Filtering Networks for Recommendation"** by a team including Jiliang Tang, Wenqi Fan, and others. This paper proposes the Graph Trend Filtering Networks (GTN) framework to tackle the issue of unreliable user interactions (e.g., random clicks) in GNN-based recommenders. It addresses drawbacks like non-adaptive propagation and non-robustness in existing methods by introducing a graph trend collaborative filtering approach that adaptively assesses the reliability of interactions.
+
+Furthermore, the context identifies several highly influential papers that are frequently cited as foundations in this research area. These key papers, which are co-cited by the works above, include **"Neural Collaborative Filtering"**, **"Neural Graph Collaborative Filtering"**, and **"KGAT: Knowledge Graph Attention Network for Recommendation"**.
+============================================================
+
+============================================================
+Mode: baseline
+Query: What are the main papers about Graph Neural Networks?
+
+Based solely on the provided context, the main papers about Graph Neural Networks (GNNs) are the three surveys and foundational works listed. These papers provide comprehensive overviews, taxonomies, and analyses of the field.
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"** (ID: 5fdb2c1591e0118a02c4f540): This paper aims to provide a systematic and comprehensive review to show a "panorama" of GNNs. It introduces a novel taxonomy for GNNs, classifies 327 relevant literatures into categories, and summarizes four future research directions.
+
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"** (ID: 630359fd90e50fcafd88ee59): This work serves as a comprehensive tutorial that covers the fundamental concepts, new research frontiers, and broad applications of GNNs. It is based on a published book and addresses the challenge of gaining a global perspective on the rapidly developing field.
+
+3.  **"Computational Capabilities of Graph Neural Networks"** (ID: 5390a74f20f70186a0e8bc2a): This is a more theoretical paper that investigates the approximation properties of GNNs. It characterizes the types of functions that can be approximated by GNNs, establishing a universal approximation property similar to that of classic feedforward neural networks, which is a foundational result for the model's computational capabilities.
+============================================================
+
+============================================================
+Mode: graph_enabled_compare
+Query: What papers discuss graph neural networks?
+
+Based on the provided context, the following papers discuss graph neural networks:
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"** by Yu Zhou, Haixia Zheng, Xin Huang, Shufeng Hao, Dengao Li, and Jumin Zhao. This paper provides a systematic and comprehensive review of graph neural networks, offering a novel taxonomy and summarizing future research directions.
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"** by Peng Cui, Jian Pei, Xiaojie Guo, and Liang Zhao. This work serves as a broad tutorial, covering the fundamental concepts, new research frontiers, and emerging applications of graph neural networks.
+3.  **"A Fair Comparison of Graph Neural Networks for Graph Classification"**. This paper addresses experimental reproducibility in the field by re-evaluating several popular GNN models for graph classification in a controlled framework.
+
+These three papers are explicitly identified in the context as focusing on the topic of graph neural networks.
+============================================================
+
+============================================================
+Mode: baseline_compare
+Query: What papers discuss graph neural networks?
+
+Based on the provided context, the following papers discuss graph neural networks:
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"**: This paper provides a systematic and comprehensive review of graph neural networks, offering a novel taxonomy and summarizing future research directions. It references up to 327 relevant literatures to show a panorama of the field.
+
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"**: This paper serves as a comprehensive tutorial on graph neural networks, covering fundamental concepts, new research frontiers, and broad applications. It also introduces an accompanying book on the topic.
+
+3.  **"A Fair Comparison of Graph Neural Networks for Graph Classification"**: This paper addresses experimental reproducibility in the graph representation learning field. It re-evaluates five popular GNN models across nine benchmarks to provide a rigorous and fair comparison for graph classification tasks.
+============================================================

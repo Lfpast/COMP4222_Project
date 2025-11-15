@@ -3,6 +3,7 @@ data/
 data/*
 data/raw/
 data/processed/
+.txt
 
 # Python
 __pycache__/
