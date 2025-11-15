@@ -617,7 +617,8 @@ class RetrievalEvaluator:
                 'coverage_score': self.calculate_coverage_score(semantic_recs),
                 'ndcg': self.calculate_ndcg(semantic_recs, top_k)
             },
-            'comparison': self.calculate_ranking_correlation(han_recs, semantic_recs)
+            'comparison': self.calculate_ranking_correlation(han_recs, semantic_recs),
+            'han_advantage': self.calculate_han_advantage_score(han_recs, semantic_recs)
         }
         
         return results
@@ -688,6 +689,23 @@ class RetrievalEvaluator:
         print(f"HAN:      {han['ndcg']:.3f}")
         print(f"Semantic: {sem['ndcg']:.3f}")
         print(f"Winner: {'🏆 HAN' if han['ndcg'] > sem['ndcg'] else '🏆 Semantic' if sem['ndcg'] > han['ndcg'] else '🤝 Tie'}")
+        
+        # NEW: HAN-Specific Advantage Analysis
+        print("\n--- HAN ADVANTAGE ANALYSIS ---")
+        adv = results.get('han_advantage', {})
+        if adv and 'han_graph_advantage' in adv:
+            print(f"Graph Advantage Score: {adv['han_graph_advantage']:.2%}")
+            print(f"HAN Finds More Influential Papers: {'✅ YES' if adv['han_finds_influential'] else '❌ NO'}")
+            if 'han_unique_avg_citations' in adv and 'semantic_unique_avg_citations' in adv:
+                print(f"  - HAN unique papers avg citations: {adv['han_unique_avg_citations']:.1f}")
+                print(f"  - Semantic unique papers avg citations: {adv['semantic_unique_avg_citations']:.1f}")
+            print(f"HAN Builds More Coherent Set: {'✅ YES' if adv['han_builds_coherent_set'] else '❌ NO'}")
+            if 'han_cocitation_connections' in adv and 'semantic_cocitation_connections' in adv:
+                print(f"  - HAN co-citation connections: {adv['han_cocitation_connections']}")
+                print(f"  - Semantic co-citation connections: {adv['semantic_cocitation_connections']}")
+            print(f"Explanation: {adv['explanation']}")
+        else:
+            print("HAN advantage analysis not available")
         
         # Determine overall winner with expanded metrics
         print("\n" + "="*70)
