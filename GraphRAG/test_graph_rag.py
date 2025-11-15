@@ -6,6 +6,7 @@
 import os
 from dotenv import load_dotenv
 from graph_rag_system import AcademicRecommender, GraphRAGEngine
+from evaluate_retrieval import RetrievalEvaluator
 
 
 class TestResults:
@@ -325,6 +326,96 @@ def test_graph_rag_engine(recommender, results):
         results.add_test("2.3 Answer Quality Comparison", False, f"Unexpected error: {e}")
 
 
+def test_retrieval_evaluation(recommender, results):
+    """Test 3: Compare HAN vs Pure Semantic Retrieval"""
+    print("\n" + "="*70)
+    print("🧪 TEST 3: Retrieval Quality Evaluation (HAN vs Semantic)")
+    print("="*70)
+    
+    if recommender is None:
+        results.add_test("3.0 Retrieval Evaluation (skipped)", False, "Recommender not available")
+        return
+    
+    evaluator = RetrievalEvaluator(recommender)
+    
+    # Test 3.1: Single query evaluation
+    print("\n--- Test 3.1: Query Evaluation ---")
+    try:
+        test_query = "graph neural networks for recommender systems"
+        eval_results = evaluator.evaluate_query(test_query, top_k=10)
+        
+        # Validation
+        assert eval_results is not None, "Evaluation results are None"
+        assert 'han' in eval_results, "Missing HAN results"
+        assert 'semantic' in eval_results, "Missing semantic results"
+        assert 'comparison' in eval_results, "Missing comparison"
+        
+        # Check that both methods returned recommendations
+        han_recs = eval_results['han']['recommendations']
+        sem_recs = eval_results['semantic']['recommendations']
+        
+        assert len(han_recs) > 0, "HAN returned no recommendations"
+        assert len(sem_recs) > 0, "Semantic returned no recommendations"
+        
+        results.add_test("3.1 Query Evaluation", True)
+        
+    except AssertionError as e:
+        results.add_test("3.1 Query Evaluation", False, str(e))
+        return
+    except Exception as e:
+        results.add_test("3.1 Query Evaluation", False, f"Unexpected error: {e}")
+        return
+    
+    # Test 3.2: Metrics calculation
+    print("\n--- Test 3.2: Metrics Calculation ---")
+    try:
+        han = eval_results['han']
+        sem = eval_results['semantic']
+        
+        # Validate all metrics exist
+        assert 'diversity' in han, "Missing diversity metrics"
+        assert 'novelty' in han, "Missing novelty metric"
+        assert 'citation_coverage' in han, "Missing citation metrics"
+        assert 'graph_structure_score' in han, "Missing graph score"
+        
+        # Validate metric ranges
+        assert 0 <= han['diversity']['venue_diversity'] <= 1, "Invalid diversity"
+        assert 0 <= han['novelty'] <= 1, "Invalid novelty"
+        assert han['citation_coverage']['avg_citations'] >= 0, "Invalid citations"
+        assert 0 <= han['graph_structure_score'] <= 1, "Invalid graph score"
+        
+        results.add_test("3.2 Metrics Calculation", True)
+        
+    except AssertionError as e:
+        results.add_test("3.2 Metrics Calculation", False, str(e))
+        return
+    except Exception as e:
+        results.add_test("3.2 Metrics Calculation", False, f"Unexpected error: {e}")
+        return
+    
+    # Test 3.3: Comparison metrics
+    print("\n--- Test 3.3: Ranking Comparison ---")
+    try:
+        comp = eval_results['comparison']
+        
+        assert 'overlap_ratio' in comp, "Missing overlap ratio"
+        assert 'rank_correlation' in comp, "Missing rank correlation"
+        
+        # Validate ranges
+        assert 0 <= comp['overlap_ratio'] <= 1, "Invalid overlap ratio"
+        assert -1 <= comp['rank_correlation'] <= 1, "Invalid correlation"
+        
+        # Print summary
+        evaluator.print_evaluation_report(eval_results)
+        
+        results.add_test("3.3 Ranking Comparison", True)
+        
+    except AssertionError as e:
+        results.add_test("3.3 Ranking Comparison", False, str(e))
+    except Exception as e:
+        results.add_test("3.3 Ranking Comparison", False, f"Unexpected error: {e}")
+
+
 def main():
     """Run all tests"""
     print("="*70)
@@ -338,6 +429,9 @@ def main():
     
     # Test 2: GraphRAG Engine (reuse recommender if successful)
     test_graph_rag_engine(recommender, results)
+    
+    # Test 3: Retrieval Evaluation (HAN vs Semantic)
+    test_retrieval_evaluation(recommender, results)
     
     # Print summary and return exit code
     all_passed = results.print_summary()
