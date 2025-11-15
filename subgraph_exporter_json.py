@@ -302,19 +302,19 @@ if __name__ == "__main__":
     
     # 1. Point this to your GIANT raw JSON file
     #    (e.g., dblp_v10.json or whatever it's called)
-    RAW_JSON_PATH = "D:/path/to/your/dblp_raw_data.json" # <-- IMPORTANT: Update this
+    RAW_JSON_PATH = r"D:\code\COMP_4222\Project_new\data\raw\data.jsonl" # <-- IMPORTANT: Update this
     
     # 2. This is where the new, small CSVs will be saved
     OUTPUT_DIR = "data/focused_v1"
     
     # 3. Years for the seed papers
-    SEED_YEARS = [2020, 2021, 2022]
+    SEED_YEARS = [2019, 2020, 2021, 2022]
     
     # 4. Fuzzy venue list (lowercase)
     SEED_VENUE_LIST = [
         "cvpr", "computer vision and pattern recognition",
         "iclr", "international conference on learning representations",
-        "icml", "international conference on machine learning"
+        "icml", "international conference on machine learning",
     ]
     
     # ---------------------

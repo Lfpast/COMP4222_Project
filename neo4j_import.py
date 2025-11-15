@@ -304,10 +304,12 @@ if __name__ == "__main__":
     # Check command line argument
     if len(sys.argv) > 1:
         dataset_type = sys.argv[1].lower()
-    
+    else:
+        dataset_type = "data" # THIS SHOULD BE AVOIDED!
+
     print(f"\n📊 Dataset: {dataset_type.upper()}")
-    data_dir = "data"
-    
+    data_dir = "data/" + dataset_type
+
     print(f"📁 Data directory: {data_dir}/")
     
     print("\n⚠️  MEMORY CONFIGURATION TIPS:")

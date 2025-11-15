@@ -639,7 +639,7 @@ if __name__ == "__main__":
         'SAMPLE_SIZE': None,           # <-- Set to None to use your whole focused DB
         'EPOCHS': 50,                  # <-- Start with 50-100 epochs
         'LEARNING_RATE': 0.001,
-        'SAVE_DIR': 'models/link_prediction_v3', # <-- New save dir
+        'SAVE_DIR': 'models/link_prediction_v4', # <-- New save dir
         'HIDDEN_DIM': 128,
         'OUT_DIM': 384,
         'NUM_HEADS': 8
