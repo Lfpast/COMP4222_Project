@@ -444,28 +444,14 @@ class GraphEmbeddingTrainer:
         # Create a negative sampler
         # For every 1 'cites' edge, create 5 'fake' (negative) edges
         
-        # --- THIS IS THE FIX for AttributeError ---
-        # Handles DGL 0.8 vs 0.9+ API change
-        try:
-            # DGL 0.9+
-            import dgl.sampling
-            sampler = dgl.sampling.GlobalNegativeSampling(
-                g=graph, 
-                k=5, 
-                etype=cites_etype_tuple
-            )
-            print("   Using 'dgl.sampling.GlobalNegativeSampling' (DGL 0.9+)")
-        except (ImportError, AttributeError):
-            # DGL 0.8
-            print("   ⚠️  'dgl.sampling' not found. Falling back to 'dgl.dataloading.GlobalNegativeSampler'. (DGL 0.8)")
-            # Note the different name: GlobalNegativeSampler (not Sampling)
-            import dgl.dataloading
-            sampler = dgl.dataloading.GlobalNegativeSampler(
-                g=graph, 
-                k=5, 
-                etype=cites_etype_tuple
-            )
-        # --- END OF FIX ---
+        # 统一使用 dgl.dataloading.GlobalNegativeSampler
+        import dgl.dataloading
+        sampler = dgl.dataloading.GlobalNegativeSampler(
+            g=graph,
+            k=5,
+            etype=cites_etype_tuple
+        )
+        print("   Using 'dgl.dataloading.GlobalNegativeSampler'")
         
         # Create an EdgeDataLoader to iterate over batches of edges
         dataloader = dgl.dataloading.EdgeDataLoader(
