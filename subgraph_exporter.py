@@ -321,7 +321,7 @@ if __name__ == "__main__":
     OUTPUT_DIR = "data/focused_v1"
     
     # Years for the seed papers
-    SEED_YEARS = [2020, 2021, 2022]
+    SEED_YEARS = [2019, 2020, 2021, 2022]
     
     # Fuzzy venue list. We use lowercase and 'contains'
     # This matches "ICLR", "ICLR 2020", "International Conference on Learning Representations"
@@ -332,6 +332,9 @@ if __name__ == "__main__":
         "international conference on learning representations",
         "icml",
         "international conference on machine learning"
+        "neurips",
+        "nips",
+        "neural information processing systems"
     ]
     
     # ---------------------
