@@ -19,12 +19,12 @@ warnings.filterwarnings('ignore')
 
 class AcademicRecommender:
     def __init__(self, 
-                 model_path=r"..\training\models\trial1\han_embeddings.pth", 
+                 model_path=r"training\models\trial5\han_embeddings.pth", 
                  neo4j_uri="neo4j://127.0.0.1:7687",
                  neo4j_username="neo4j",
-                 neo4j_password="12345678"):
+                 neo4j_password="87654321"):
         """初始化学术推荐系统"""
-        self.device = torch.device('cpu')
+        self.device = torch.device('cuda')
         
         # 加载训练好的嵌入（封装到 helper，支持容错与缓存）
         self._emb_np_cache = {}
@@ -928,7 +928,7 @@ class AcademicRecommender:
 
 class CollaboratorRecommender:
     def __init__(self, 
-                 model_path=r"..\training\models\trial1\han_embeddings.pth",
+                 model_path=r"training\models\trial5\han_embeddings.pth",
                  neo4j_uri="neo4j://127.0.0.1:7687",
                  neo4j_username="neo4j", 
                  neo4j_password="12345678"):

@@ -313,7 +313,7 @@ def main():
     # Load all configuration from environment variables
     # Provide defaults to match your previous hard-coded values
     
-    MODEL_PATH = os.environ.get("MODEL_PATH", r"..\training\models\trial1\han_embeddings.pth")
+    MODEL_PATH = os.environ.get("MODEL_PATH", r"training\models\trial5\han_embeddings.pth")
     
     NEO4J_URI = os.environ.get("NEO4J_URI", "neo4j://127.0.0.1:7687")
     NEO4J_USERNAME = os.environ.get("NEO4J_USERNAME", "neo4j")

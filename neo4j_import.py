@@ -46,7 +46,7 @@ class Neo4jGraphBuilder:
             return
         
         # Use batch deletion to avoid memory issues
-        batch_size = 100000
+        batch_size = 1000000
         deleted = 0
         
         # Create progress bar
@@ -104,7 +104,7 @@ class Neo4jGraphBuilder:
         papers_df = papers_df.fillna('')
         
         # Batch import - using UNWIND for better performance
-        batch_size = 100000
+        batch_size = 1000000
         with tqdm(total=len(papers_df), desc="Papers", unit="paper") as pbar:
             for i in range(0, len(papers_df), batch_size):
                 batch = papers_df.iloc[i:i+batch_size]
@@ -174,7 +174,7 @@ class Neo4jGraphBuilder:
     def import_relationships(self):
         """Import relationship data in batches"""
         print("\n🔗 Importing relationships...")
-        batch_size = 1000
+        batch_size = 1000000
         
         # WRITTEN_BY relationship
         print("\n✍️  Creating WRITTEN_BY relationships...")
