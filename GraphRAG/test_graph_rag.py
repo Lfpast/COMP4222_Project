@@ -346,134 +346,85 @@ def test_graph_rag_engine(recommender, results):
 
 
 def test_retrieval_evaluation(recommender, results):
-    """Test 3: Compare HAN vs Pure Semantic Retrieval"""
+    """Test 3: Sanity Check - Verify HAN Uses Graph Information"""
     print("\n" + "="*70)
-    print("🧪 TEST 3: Retrieval Quality Evaluation (HAN vs Semantic)")
+    print("🧪 TEST 3: HAN Graph Utilization Sanity Check")
     print("="*70)
     
     if recommender is None:
-        results.add_test("3.0 Retrieval Evaluation (skipped)", False, "Recommender not available")
+        results.add_test("3.0 Graph Sanity Check (skipped)", False, "Recommender not available")
         return
     
     evaluator = RetrievalEvaluator(recommender)
     
-    # Test 3.1: Single query evaluation
-    print("\n--- Test 3.1: Query Evaluation ---")
+    # Single test: HAN retrieves more graph-connected papers than pure SBERT
+    print("\n--- Test 3.1: HAN Graph Structure Utilization ---")
     try:
         test_query = "graph neural networks for recommender systems"
-        eval_results = evaluator.evaluate_query(test_query, top_k=10)
+        print(f"📊 Evaluating query: {test_query}")
         
-        # Validation
-        assert eval_results is not None, "Evaluation results are None"
-        assert 'han' in eval_results, "Missing HAN results"
-        assert 'semantic' in eval_results, "Missing semantic results"
-        assert 'comparison' in eval_results, "Missing comparison"
-        
-        # Check that both methods returned recommendations
-        han_recs = eval_results['han']['recommendations']
-        sem_recs = eval_results['semantic']['recommendations']
+        # Get recommendations from both methods
+        han_recs = evaluator.get_han_recommendations(test_query, top_k=10)
+        sem_recs = evaluator.get_semantic_recommendations(test_query, top_k=10)
         
         assert len(han_recs) > 0, "HAN returned no recommendations"
         assert len(sem_recs) > 0, "Semantic returned no recommendations"
         
-        results.add_test("3.1 Query Evaluation", True)
+        # Calculate graph structure scores (co-citation, direct citation, author overlap, keyword coherence)
+        han_graph = evaluator.calculate_graph_structure_score(han_recs)
+        sem_graph = evaluator.calculate_graph_structure_score(sem_recs)
         
-    except AssertionError as e:
-        results.add_test("3.1 Query Evaluation", False, str(e))
-        return
-    except Exception as e:
-        results.add_test("3.1 Query Evaluation", False, f"Unexpected error: {e}")
-        return
-    
-    # Test 3.2: Metrics calculation
-    print("\n--- Test 3.2: Metrics Calculation ---")
-    try:
-        han = eval_results['han']
-        sem = eval_results['semantic']
+        # SANITY CHECK: HAN should leverage graph structure more than pure semantic
+        # At least one graph metric should be higher for HAN
+        han_total_graph = (
+            han_graph.get('cocitation_score', 0) +
+            han_graph.get('citation_connectivity', 0) +
+            han_graph.get('author_overlap_score', 0) +
+            han_graph.get('keyword_coherence', 0)
+        )
         
-        # Validate all metrics exist
-        assert 'diversity' in han, "Missing diversity metrics"
-        assert 'novelty' in han, "Missing novelty metric"
-        assert 'citation_coverage' in han, "Missing citation metrics"
-        assert 'graph_structure_score' in han, "Missing graph score"
+        sem_total_graph = (
+            sem_graph.get('cocitation_score', 0) +
+            sem_graph.get('citation_connectivity', 0) +
+            sem_graph.get('author_overlap_score', 0) +
+            sem_graph.get('keyword_coherence', 0)
+        )
         
-        # Validate metric ranges
-        assert 0 <= han['diversity']['venue_diversity'] <= 1, "Invalid diversity"
-        assert 0 <= han['novelty'] <= 1, "Invalid novelty"
-        assert han['citation_coverage']['avg_citations'] >= 0, "Invalid citations"
+        # Print detailed breakdown
+        print("\n   📈 Graph Structure Metrics:")
+        print(f"   HAN:")
+        print(f"     - Co-citation: {han_graph.get('cocitation_score', 0):.3f}")
+        print(f"     - Citation connectivity: {han_graph.get('citation_connectivity', 0):.3f}")
+        print(f"     - Author overlap: {han_graph.get('author_overlap_score', 0):.3f}")
+        print(f"     - Keyword coherence: {han_graph.get('keyword_coherence', 0):.3f}")
+        print(f"     → Total: {han_total_graph:.3f}")
         
-        # Validate graph structure score (now a dict with multiple metrics)
-        graph_score = han['graph_structure_score']
-        assert isinstance(graph_score, dict), "Graph score should be a dict"
-        assert 'cocitation_score' in graph_score, "Missing cocitation_score"
-        assert 0 <= graph_score['cocitation_score'] <= 1, "Invalid cocitation score"
+        print(f"\n   Semantic:")
+        print(f"     - Co-citation: {sem_graph.get('cocitation_score', 0):.3f}")
+        print(f"     - Citation connectivity: {sem_graph.get('citation_connectivity', 0):.3f}")
+        print(f"     - Author overlap: {sem_graph.get('author_overlap_score', 0):.3f}")
+        print(f"     - Keyword coherence: {sem_graph.get('keyword_coherence', 0):.3f}")
+        print(f"     → Total: {sem_total_graph:.3f}")
         
-        results.add_test("3.2 Metrics Calculation", True)
+        improvement_ratio = (han_total_graph / sem_total_graph) if sem_total_graph > 0 else float('inf')
+        print(f"\n   📊 HAN improvement: {improvement_ratio:.2f}x")
         
-    except AssertionError as e:
-        results.add_test("3.2 Metrics Calculation", False, str(e))
-        return
-    except Exception as e:
-        results.add_test("3.2 Metrics Calculation", False, f"Unexpected error: {e}")
-        return
-    
-    # Test 3.3: Comparison metrics
-    print("\n--- Test 3.3: Ranking Comparison ---")
-    try:
-        comp = eval_results['comparison']
-        
-        assert 'overlap_ratio' in comp, "Missing overlap ratio"
-        assert 'rank_correlation' in comp, "Missing rank correlation"
-        
-        # Validate ranges
-        assert 0 <= comp['overlap_ratio'] <= 1, "Invalid overlap ratio"
-        assert -1 <= comp['rank_correlation'] <= 1, "Invalid correlation"
-        
-        # Print summary
-        evaluator.print_evaluation_report(eval_results)
-        
-        results.add_test("3.3 Ranking Comparison", True)
-        
-    except AssertionError as e:
-        results.add_test("3.3 Ranking Comparison", False, str(e))
-    except Exception as e:
-        results.add_test("3.3 Ranking Comparison", False, f"Unexpected error: {e}")
-    
-    # Test 3.4: HAN Advantage Score
-    print("\n--- Test 3.4: HAN Advantage Analysis ---")
-    try:
-        han_recs = eval_results['han']['recommendations']
-        sem_recs = eval_results['semantic']['recommendations']
-        
-        advantage = evaluator.calculate_han_advantage_score(han_recs, sem_recs)
-        
-        # Validation
-        assert advantage is not None, "Advantage score is None"
-        assert 'han_graph_advantage' in advantage, "Missing graph advantage"
-        assert 'han_finds_influential' in advantage, "Missing influential flag"
-        assert 'han_builds_coherent_set' in advantage, "Missing coherence flag"
-        
-        # Print results
-        print(f"   Graph Advantage: {advantage['han_graph_advantage']:.2%}")
-        print(f"   Finds Influential: {'✓' if advantage['han_finds_influential'] else '✗'}")
-        print(f"   Builds Coherent Set: {'✓' if advantage['han_builds_coherent_set'] else '✗'}")
-        print(f"   Explanation: {advantage['explanation']}")
-        
-        # HAN should ideally outperform on at least one dimension
-        has_advantage = (advantage['han_finds_influential'] or 
-                        advantage['han_builds_coherent_set'] or 
-                        advantage['han_graph_advantage'] > 0)
-        
-        if has_advantage:
-            print("   ✅ HAN demonstrates graph-aware advantage!")
+        # PASS if HAN shows any graph advantage
+        if han_total_graph > sem_total_graph:
+            print(f"   ✅ PASS: HAN retrieves more graph-connected papers (+{(improvement_ratio-1)*100:.1f}%)")
+            results.add_test("3.1 HAN Graph Utilization", True)
+        elif han_total_graph == sem_total_graph and han_total_graph > 0:
+            print(f"   ⚠️ WARN: HAN and Semantic show equal graph connectivity")
+            results.add_test("3.1 HAN Graph Utilization", True, "Equal graph connectivity")
         else:
-            print("   ⚠️ HAN did not outperform semantic on this query")
-        
-        results.add_test("3.4 HAN Advantage Analysis", True)
+            print(f"   ❌ FAIL: HAN does not utilize graph structure (worse than pure semantic)")
+            results.add_test("3.1 HAN Graph Utilization", False, 
+                           f"HAN graph score ({han_total_graph:.3f}) ≤ Semantic ({sem_total_graph:.3f})")
         
     except AssertionError as e:
-        results.add_test("3.4 HAN Advantage Analysis", False, str(e))
+        results.add_test("3.1 HAN Graph Utilization", False, str(e))
     except Exception as e:
+        results.add_test("3.1 HAN Graph Utilization", False, f"Unexpected error: {e}")
         results.add_test("3.4 HAN Advantage Analysis", False, f"Unexpected error: {e}")
 
 

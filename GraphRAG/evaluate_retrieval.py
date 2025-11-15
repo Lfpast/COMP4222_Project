@@ -1,34 +1,24 @@
 # [file name]: evaluate_retrieval.py
 #
-# Evaluation suite comparing HAN+GraphRAG vs Pure Semantic retrieval
-# Measures: Diversity, Novelty, Coverage, and Ranking Quality
+# Sanity check: Verify HAN embeddings use graph structure better than pure SBERT
 
 import os
 import numpy as np
-from typing import List, Dict, Set, Tuple
-from collections import defaultdict
+from typing import List, Dict
 from dotenv import load_dotenv
 from graph_rag_system import AcademicRecommender
-from scipy.stats import ttest_rel, wilcoxon
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 class RetrievalEvaluator:
     """
-    Evaluate and compare retrieval quality between:
-    1. HAN-based retrieval (graph-aware)
-    2. Pure semantic retrieval (original SBERT)
+    Evaluate HAN vs Pure Semantic retrieval on graph structure utilization
     """
     
     def __init__(self, recommender: AcademicRecommender):
         self.recommender = recommender
-        self.results = {
-            'han': {},
-            'semantic': {}
-        }
     
     def get_han_recommendations(self, query: str, top_k: int = 10) -> List[Dict]:
-        """Get recommendations using HAN embeddings (current implementation)"""
+        """Get recommendations using HAN embeddings (graph-aware)"""
         return self.recommender.content_based_paper_recommendation(query, top_k)
     
     def get_semantic_recommendations(self, query: str, top_k: int = 10) -> List[Dict]:
@@ -84,119 +74,15 @@ class RetrievalEvaluator:
         print(f"   ✅ Generated {len(recommendations)} pure semantic recommendations")
         return recommendations
     
-    def calculate_diversity(self, recommendations: List[Dict]) -> Dict[str, float]:
-        """
-        Measure diversity of recommendations
-        - Venue diversity: How many unique venues
-        - Year diversity: Spread across years
-        - Author diversity: Unique authors
-        """
-        if not recommendations:
-            return {'venue_diversity': 0, 'year_diversity': 0, 'unique_venues': 0, 'unique_years': 0}
-        
-        venues = [rec.get('venue', 'Unknown') for rec in recommendations]
-        years = [rec.get('year', 'Unknown') for rec in recommendations if rec.get('year') != 'Unknown']
-        
-        unique_venues = len(set(venues))
-        unique_years = len(set(years))
-        
-        # Normalized diversity (0 to 1)
-        venue_diversity = unique_venues / len(recommendations)
-        year_diversity = unique_years / len(recommendations) if years else 0
-        
-        return {
-            'venue_diversity': venue_diversity,
-            'year_diversity': year_diversity,
-            'unique_venues': unique_venues,
-            'unique_years': unique_years
-        }
-    
-    def calculate_novelty(self, recommendations: List[Dict], query_terms: Set[str]) -> float:
-        """
-        Measure novelty: how many recommendations introduce new concepts
-        beyond the query terms
-        
-        Higher novelty = retrieves papers with broader/related concepts
-        """
-        if not recommendations:
-            return 0.0
-        
-        novel_papers = 0
-        for rec in recommendations:
-            title = rec.get('title', '').lower()
-            abstract = rec.get('abstract', '').lower()
-            
-            # Extract words from title/abstract
-            title_words = set(title.split())
-            abstract_words = set(abstract.split())
-            paper_words = title_words | abstract_words
-            
-            # Check if paper introduces words not in query
-            new_concepts = paper_words - query_terms
-            if len(new_concepts) > 5:  # Threshold for "novel"
-                novel_papers += 1
-        
-        return novel_papers / len(recommendations)
-    
-    def calculate_citation_coverage(self, recommendations: List[Dict]) -> Dict[str, float]:
-        """
-        Measure how well recommendations cover the citation graph
-        - High citation papers: influential works
-        - Citation diversity: mix of highly/lowly cited
-        """
-        if not recommendations:
-            return {'avg_citations': 0, 'max_citations': 0, 'citation_std': 0}
-        
-        citations = [rec.get('citation_count', 0) for rec in recommendations]
-        
-        return {
-            'avg_citations': np.mean(citations),
-            'max_citations': max(citations),
-            'min_citations': min(citations),
-            'citation_std': np.std(citations)
-        }
-    
-    def calculate_ranking_correlation(self, han_recs: List[Dict], semantic_recs: List[Dict]) -> Dict[str, float]:
-        """
-        Calculate how different the rankings are
-        - Overlap: papers appearing in both
-        - Rank correlation: Spearman correlation of ranks
-        - Unique to each: papers only in one system
-        """
-        han_ids = {rec['paper_id']: rec['rank'] for rec in han_recs}
-        semantic_ids = {rec['paper_id']: rec['rank'] for rec in semantic_recs}
-        
-        overlap_ids = set(han_ids.keys()) & set(semantic_ids.keys())
-        han_unique = set(han_ids.keys()) - set(semantic_ids.keys())
-        semantic_unique = set(semantic_ids.keys()) - set(han_ids.keys())
-        
-        overlap_ratio = len(overlap_ids) / max(len(han_ids), 1)
-        
-        # Spearman correlation for overlapping papers
-        if len(overlap_ids) > 1:
-            from scipy.stats import spearmanr
-            han_ranks = [han_ids[pid] for pid in overlap_ids]
-            sem_ranks = [semantic_ids[pid] for pid in overlap_ids]
-            correlation, p_value = spearmanr(han_ranks, sem_ranks)
-        else:
-            correlation = 0.0
-            p_value = 1.0
-        
-        return {
-            'overlap_ratio': overlap_ratio,
-            'overlap_count': len(overlap_ids),
-            'han_unique_count': len(han_unique),
-            'semantic_unique_count': len(semantic_unique),
-            'rank_correlation': correlation,
-            'correlation_pvalue': p_value
-        }
-    
     def calculate_graph_structure_score(self, recommendations: List[Dict]) -> Dict[str, float]:
         """
         Measure how well recommendations leverage graph structure
-        by checking co-citation patterns in Neo4j
         
-        Returns multiple graph-aware metrics that prove HAN's advantage
+        Returns 4 graph-aware metrics:
+        1. Co-citation score: papers citing same references
+        2. Citation connectivity: direct citations between papers
+        3. Author overlap: shared authors
+        4. Keyword coherence: shared keywords
         """
         if not self.recommender.graph_db or not recommendations:
             return {
@@ -285,522 +171,12 @@ class RetrievalEvaluator:
             }
         
         return metrics
-    
-    def calculate_han_advantage_score(self, han_recs: List[Dict], semantic_recs: List[Dict]) -> Dict[str, any]:
-        """
-        Calculate metrics that specifically show HAN's advantage over pure SBERT.
-        
-        Key insight: HAN should retrieve papers that are:
-        1. More connected in the citation graph
-        2. Form tighter research communities
-        3. Have higher centrality in the knowledge graph
-        4. Better represent influential work (not just keyword matches)
-        """
-        if not self.recommender.graph_db:
-            return {
-                'han_graph_advantage': 0.0,
-                'han_finds_influential': False,
-                'han_builds_coherent_set': False,
-                'explanation': "Neo4j not available"
-            }
-        
-        han_ids = [str(rec['paper_id']) for rec in han_recs]
-        sem_ids = [str(rec['paper_id']) for rec in semantic_recs]
-        
-        # Papers unique to HAN
-        han_unique = set(han_ids) - set(sem_ids)
-        
-        if not han_unique:
-            return {
-                'han_graph_advantage': 0.0,
-                'han_finds_influential': False,
-                'han_builds_coherent_set': False,
-                'explanation': "No unique papers in HAN results"
-            }
-        
-        try:
-            # Check if HAN's unique papers are highly connected
-            unique_ids_str = ', '.join([f"'{pid}'" for pid in han_unique])
-            
-            # 1. Are HAN's unique papers highly cited? (influential)
-            query_influential = f"""
-            MATCH (p:Paper)
-            WHERE p.paper_id IN [{unique_ids_str}]
-            RETURN AVG(p.n_citation) as avg_citations, MAX(p.n_citation) as max_citations
-            """
-            result = self.recommender.graph_db.run(query_influential).data()
-            han_unique_citations = result[0]['avg_citations'] if result and result[0]['avg_citations'] else 0
-            
-            # Compare to semantic's unique papers
-            sem_unique = set(sem_ids) - set(han_ids)
-            if sem_unique:
-                sem_unique_str = ', '.join([f"'{pid}'" for pid in sem_unique])
-                result_sem = self.recommender.graph_db.run(f"""
-                    MATCH (p:Paper)
-                    WHERE p.paper_id IN [{sem_unique_str}]
-                    RETURN AVG(p.n_citation) as avg_citations
-                """).data()
-                sem_unique_citations = result_sem[0]['avg_citations'] if result_sem and result_sem[0]['avg_citations'] else 0
-            else:
-                sem_unique_citations = 0
-            
-            han_finds_influential = han_unique_citations > sem_unique_citations
-            
-            # 2. Are HAN's papers more connected to each other?
-            query_coherence = f"""
-            MATCH (p1:Paper)-[:CITES]->(common:Paper)<-[:CITES]-(p2:Paper)
-            WHERE p1.paper_id IN [{', '.join([f"'{pid}'" for pid in han_ids])}]
-            AND p2.paper_id IN [{', '.join([f"'{pid}'" for pid in han_ids])}]
-            AND p1.paper_id < p2.paper_id
-            RETURN COUNT(common) as han_connections
-            """
-            result = self.recommender.graph_db.run(query_coherence).data()
-            han_connections = result[0]['han_connections'] if result else 0
-            
-            query_sem_coherence = f"""
-            MATCH (p1:Paper)-[:CITES]->(common:Paper)<-[:CITES]-(p2:Paper)
-            WHERE p1.paper_id IN [{', '.join([f"'{pid}'" for pid in sem_ids])}]
-            AND p2.paper_id IN [{', '.join([f"'{pid}'" for pid in sem_ids])}]
-            AND p1.paper_id < p2.paper_id
-            RETURN COUNT(common) as sem_connections
-            """
-            result = self.recommender.graph_db.run(query_sem_coherence).data()
-            sem_connections = result[0]['sem_connections'] if result else 0
-            
-            han_builds_coherent_set = han_connections > sem_connections
-            
-            # Overall advantage score
-            graph_advantage = (han_connections - sem_connections) / max(sem_connections, 1)
-            
-            return {
-                'han_graph_advantage': graph_advantage,
-                'han_finds_influential': han_finds_influential,
-                'han_builds_coherent_set': han_builds_coherent_set,
-                'han_unique_avg_citations': han_unique_citations,
-                'semantic_unique_avg_citations': sem_unique_citations,
-                'han_cocitation_connections': han_connections,
-                'semantic_cocitation_connections': sem_connections,
-                'explanation': f"HAN finds {'more' if han_finds_influential else 'less'} influential papers and builds {'more' if han_builds_coherent_set else 'less'} coherent set"
-            }
-            
-        except Exception as e:
-            print(f"⚠️ HAN advantage calculation failed: {e}")
-            return {
-                'han_graph_advantage': 0.0,
-                'han_finds_influential': False,
-                'han_builds_coherent_set': False,
-                'explanation': f"Error: {e}"
-            }
-    
-    def calculate_author_network_metrics(self, recommendations: List[Dict]) -> Dict[str, float]:
-        """
-        分析推荐论文的作者合作网络质量
-        - 作者多样性：独立作者数
-        - 跨团队合作：不同作者组之间的合作
-        """
-        if not self.recommender.graph_db or not recommendations:
-            return {'author_diversity': 0, 'unique_authors': 0, 'cross_team_score': 0}
-        
-        paper_ids = [str(rec['paper_id']) for rec in recommendations]
-        formatted_ids = [f"'{pid}'" for pid in paper_ids]
-        ids_str = ', '.join(formatted_ids)
-        
-        try:
-            # 查询作者信息
-            query = f"""
-            MATCH (p:Paper)-[:WRITTEN_BY]->(a:Author)
-            WHERE p.paper_id IN [{ids_str}]
-            RETURN p.paper_id as paper_id, collect(a.author_id) as authors
-            """
-            result = self.recommender.graph_db.run(query).data()
-            
-            all_authors = set()
-            paper_author_sets = []
-            
-            for row in result:
-                authors = set(row['authors'])
-                all_authors.update(authors)
-                paper_author_sets.append(authors)
-            
-            # 计算跨团队合作分数（不同论文作者集合的差异度）
-            cross_team_pairs = 0
-            total_pairs = 0
-            for i in range(len(paper_author_sets)):
-                for j in range(i + 1, len(paper_author_sets)):
-                    total_pairs += 1
-                    # 如果两篇论文的作者没有交集，说明是跨团队
-                    if len(paper_author_sets[i] & paper_author_sets[j]) == 0:
-                        cross_team_pairs += 1
-            
-            cross_team_score = cross_team_pairs / total_pairs if total_pairs > 0 else 0
-            author_diversity = len(all_authors) / max(len(recommendations), 1)
-            
-            return {
-                'author_diversity': author_diversity,
-                'unique_authors': len(all_authors),
-                'cross_team_score': cross_team_score
-            }
-        except Exception as e:
-            print(f"⚠️ Author network query failed: {e}")
-            return {'author_diversity': 0, 'unique_authors': 0, 'cross_team_score': 0}
-    
-    def calculate_citation_network_density(self, recommendations: List[Dict]) -> Dict[str, float]:
-        """
-        计算推荐论文之间的引用网络密度
-        - 直接引用：推荐论文之间的直接引用关系
-        - 网络密度：实际引用边数 / 最大可能引用边数
-        """
-        if not self.recommender.graph_db or not recommendations:
-            return {'direct_citations': 0, 'network_density': 0}
-        
-        paper_ids = [str(rec['paper_id']) for rec in recommendations]
-        formatted_ids = [f"'{pid}'" for pid in paper_ids]
-        ids_str = ', '.join(formatted_ids)
-        
-        try:
-            query = f"""
-            MATCH (p1:Paper)-[:CITES]->(p2:Paper)
-            WHERE p1.paper_id IN [{ids_str}] AND p2.paper_id IN [{ids_str}]
-            RETURN COUNT(*) as direct_citations
-            """
-            result = self.recommender.graph_db.run(query).data()
-            
-            if result:
-                direct_citations = result[0]['direct_citations']
-                max_possible = len(recommendations) * (len(recommendations) - 1)
-                network_density = direct_citations / max_possible if max_possible > 0 else 0
-                
-                return {
-                    'direct_citations': direct_citations,
-                    'network_density': network_density
-                }
-        except Exception as e:
-            print(f"⚠️ Citation network query failed: {e}")
-        
-        return {'direct_citations': 0, 'network_density': 0}
-    
-    def calculate_semantic_relevance_score(self, recommendations: List[Dict], query: str) -> Dict[str, float]:
-        """
-        使用TF-IDF计算推荐论文与查询的语义相关性
-        更精确地衡量语义匹配度
-        """
-        if not recommendations:
-            return {'avg_tfidf_score': 0, 'min_tfidf_score': 0, 'max_tfidf_score': 0}
-        
-        # 收集所有文本
-        texts = [query]
-        for rec in recommendations:
-            title = rec.get('title', '')
-            abstract = rec.get('abstract', '')
-            texts.append(f"{title} {abstract}")
-        
-        try:
-            # 计算TF-IDF
-            vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
-            tfidf_matrix = vectorizer.fit_transform(texts)
-            
-            # 计算查询与每篇论文的余弦相似度
-            from sklearn.metrics.pairwise import cosine_similarity
-            query_vec = tfidf_matrix[0:1]
-            doc_vecs = tfidf_matrix[1:]
-            similarities = cosine_similarity(query_vec, doc_vecs)[0]
-            
-            return {
-                'avg_tfidf_score': float(np.mean(similarities)),
-                'min_tfidf_score': float(np.min(similarities)),
-                'max_tfidf_score': float(np.max(similarities)),
-                'std_tfidf_score': float(np.std(similarities))
-            }
-        except Exception as e:
-            print(f"⚠️ TF-IDF calculation failed: {e}")
-            return {'avg_tfidf_score': 0, 'min_tfidf_score': 0, 'max_tfidf_score': 0, 'std_tfidf_score': 0}
-    
-    def calculate_coverage_score(self, recommendations: List[Dict]) -> float:
-        """
-        计算推荐的覆盖率：推荐论文在整个知识图谱中的分布广度
-        通过计算推荐论文在图中的平均最短路径来衡量
-        """
-        if not self.recommender.graph_db or not recommendations or len(recommendations) < 2:
-            return 0.0
-        
-        paper_ids = [str(rec['paper_id']) for rec in recommendations]
-        formatted_ids = [f"'{pid}'" for pid in paper_ids]
-        ids_str = ', '.join(formatted_ids)
-        
-        try:
-            # 计算推荐论文之间的平均最短路径长度
-            query = f"""
-            MATCH (p1:Paper), (p2:Paper)
-            WHERE p1.paper_id IN [{ids_str}] AND p2.paper_id IN [{ids_str}]
-            AND p1.paper_id < p2.paper_id
-            MATCH path = shortestPath((p1)-[*..5]-(p2))
-            RETURN AVG(length(path)) as avg_distance, COUNT(*) as pairs
-            """
-            result = self.recommender.graph_db.run(query).data()
-            
-            if result and result[0]['pairs'] > 0:
-                avg_distance = result[0]['avg_distance']
-                # 距离越大，覆盖范围越广
-                # 归一化到0-1，假设最大距离为5
-                return min(avg_distance / 5.0, 1.0)
-        except Exception as e:
-            print(f"⚠️ Coverage calculation failed: {e}")
-        
-        return 0.0
-    
-    def calculate_ndcg(self, recommendations: List[Dict], k: int = 10) -> float:
-        """
-        计算NDCG（归一化折损累计增益）
-        使用引用数作为相关性分数
-        """
-        if not recommendations:
-            return 0.0
-        
-        def dcg_at_k(scores, k):
-            scores = scores[:k]
-            return sum([score / np.log2(idx + 2) for idx, score in enumerate(scores)])
-        
-        # 使用引用数作为相关性
-        relevance_scores = [rec.get('citation_count', 0) for rec in recommendations[:k]]
-        
-        # 理想排序（按引用数降序）
-        ideal_scores = sorted(relevance_scores, reverse=True)
-        
-        dcg = dcg_at_k(relevance_scores, k)
-        idcg = dcg_at_k(ideal_scores, k)
-        
-        return dcg / idcg if idcg > 0 else 0.0
-    
-    def evaluate_query(self, query: str, top_k: int = 10) -> Dict[str, Dict]:
-        """
-        Evaluate a single query with both methods
-        """
-        print("\n" + "="*70)
-        print(f"📊 Evaluating Query: {query}")
-        print("="*70)
-        
-        # Get recommendations from both methods
-        print("\n1️⃣ HAN-based retrieval...")
-        han_recs = self.get_han_recommendations(query, top_k)
-        
-        print("\n2️⃣ Pure semantic retrieval...")
-        semantic_recs = self.get_semantic_recommendations(query, top_k)
-        
-        # Extract query terms for novelty calculation
-        query_terms = set(query.lower().split())
-        
-        # Calculate metrics
-        print("\n3️⃣ Computing metrics...")
-        
-        results = {
-            'han': {
-                'recommendations': han_recs,
-                'diversity': self.calculate_diversity(han_recs),
-                'novelty': self.calculate_novelty(han_recs, query_terms),
-                'citation_coverage': self.calculate_citation_coverage(han_recs),
-                'graph_structure_score': self.calculate_graph_structure_score(han_recs),
-                'author_network': self.calculate_author_network_metrics(han_recs),
-                'citation_network': self.calculate_citation_network_density(han_recs),
-                'semantic_relevance': self.calculate_semantic_relevance_score(han_recs, query),
-                'coverage_score': self.calculate_coverage_score(han_recs),
-                'ndcg': self.calculate_ndcg(han_recs, top_k)
-            },
-            'semantic': {
-                'recommendations': semantic_recs,
-                'diversity': self.calculate_diversity(semantic_recs),
-                'novelty': self.calculate_novelty(semantic_recs, query_terms),
-                'citation_coverage': self.calculate_citation_coverage(semantic_recs),
-                'graph_structure_score': self.calculate_graph_structure_score(semantic_recs),
-                'author_network': self.calculate_author_network_metrics(semantic_recs),
-                'citation_network': self.calculate_citation_network_density(semantic_recs),
-                'semantic_relevance': self.calculate_semantic_relevance_score(semantic_recs, query),
-                'coverage_score': self.calculate_coverage_score(semantic_recs),
-                'ndcg': self.calculate_ndcg(semantic_recs, top_k)
-            },
-            'comparison': self.calculate_ranking_correlation(han_recs, semantic_recs),
-            'han_advantage': self.calculate_han_advantage_score(han_recs, semantic_recs)
-        }
-        
-        return results
-    
-    def print_evaluation_report(self, results: Dict[str, Dict]):
-        """Print a formatted evaluation report"""
-        print("\n" + "="*70)
-        print("📊 EVALUATION REPORT")
-        print("="*70)
-        
-        han = results['han']
-        sem = results['semantic']
-        comp = results['comparison']
-        
-        print("\n--- DIVERSITY METRICS ---")
-        print(f"HAN:      Venue: {han['diversity']['venue_diversity']:.2%} ({han['diversity']['unique_venues']} unique)")
-        print(f"Semantic: Venue: {sem['diversity']['venue_diversity']:.2%} ({sem['diversity']['unique_venues']} unique)")
-        print(f"Winner: {'🏆 HAN' if han['diversity']['venue_diversity'] > sem['diversity']['venue_diversity'] else '🏆 Semantic' if sem['diversity']['venue_diversity'] > han['diversity']['venue_diversity'] else '🤝 Tie'}")
-        
-        print(f"\nHAN:      Year: {han['diversity']['year_diversity']:.2%} ({han['diversity']['unique_years']} unique)")
-        print(f"Semantic: Year: {sem['diversity']['year_diversity']:.2%} ({sem['diversity']['unique_years']} unique)")
-        print(f"Winner: {'🏆 HAN' if han['diversity']['year_diversity'] > sem['diversity']['year_diversity'] else '🏆 Semantic' if sem['diversity']['year_diversity'] > han['diversity']['year_diversity'] else '🤝 Tie'}")
-        
-        print("\n--- NOVELTY ---")
-        print(f"HAN:      {han['novelty']:.2%} papers introduce novel concepts")
-        print(f"Semantic: {sem['novelty']:.2%} papers introduce novel concepts")
-        print(f"Winner: {'🏆 HAN' if han['novelty'] > sem['novelty'] else '🏆 Semantic' if sem['novelty'] > han['novelty'] else '🤝 Tie'}")
-        
-        print("\n--- CITATION COVERAGE ---")
-        print(f"HAN:      Avg: {han['citation_coverage']['avg_citations']:.1f}, Max: {han['citation_coverage']['max_citations']}")
-        print(f"Semantic: Avg: {sem['citation_coverage']['avg_citations']:.1f}, Max: {sem['citation_coverage']['max_citations']}")
-        print(f"Winner: {'🏆 HAN' if han['citation_coverage']['avg_citations'] > sem['citation_coverage']['avg_citations'] else '🏆 Semantic' if sem['citation_coverage']['avg_citations'] > han['citation_coverage']['avg_citations'] else '🤝 Tie'}")
-        
-        print("\n--- GRAPH STRUCTURE UTILIZATION ---")
-        print(f"HAN:      Co-citation: {han['graph_structure_score']['cocitation_score']:.2%}, Citation connectivity: {han['graph_structure_score']['citation_connectivity']:.2%}")
-        print(f"          Author overlap: {han['graph_structure_score']['author_overlap_score']:.2%}, Keyword coherence: {han['graph_structure_score']['keyword_coherence']:.2%}")
-        print(f"Semantic: Co-citation: {sem['graph_structure_score']['cocitation_score']:.2%}, Citation connectivity: {sem['graph_structure_score']['citation_connectivity']:.2%}")
-        print(f"          Author overlap: {sem['graph_structure_score']['author_overlap_score']:.2%}, Keyword coherence: {sem['graph_structure_score']['keyword_coherence']:.2%}")
-        
-        # Overall graph structure winner (average of all 4 metrics)
-        han_graph_avg = np.mean(list(han['graph_structure_score'].values()))
-        sem_graph_avg = np.mean(list(sem['graph_structure_score'].values()))
-        print(f"Winner: {'🏆 HAN' if han_graph_avg > sem_graph_avg else '🏆 Semantic' if sem_graph_avg > han_graph_avg else '🤝 Tie'} (avg: HAN {han_graph_avg:.2%} vs Semantic {sem_graph_avg:.2%})")
-        
-        print("\n--- RANKING COMPARISON ---")
-        print(f"Overlap: {comp['overlap_count']}/{len(han['recommendations'])} papers ({comp['overlap_ratio']:.1%})")
-        print(f"Unique to HAN: {comp['han_unique_count']}")
-        print(f"Unique to Semantic: {comp['semantic_unique_count']}")
-        print(f"Rank Correlation: {comp['rank_correlation']:.3f} (p={comp['correlation_pvalue']:.3f})")
-        
-        print("\n--- AUTHOR NETWORK METRICS ---")
-        print(f"HAN:      Author diversity: {han['author_network']['author_diversity']:.2f} ({han['author_network']['unique_authors']} unique)")
-        print(f"Semantic: Author diversity: {sem['author_network']['author_diversity']:.2f} ({sem['author_network']['unique_authors']} unique)")
-        print(f"HAN:      Cross-team score: {han['author_network']['cross_team_score']:.2%}")
-        print(f"Semantic: Cross-team score: {sem['author_network']['cross_team_score']:.2%}")
-        print(f"Winner: {'🏆 HAN' if han['author_network']['author_diversity'] > sem['author_network']['author_diversity'] else '🏆 Semantic' if sem['author_network']['author_diversity'] > han['author_network']['author_diversity'] else '🤝 Tie'}")
-        
-        print("\n--- CITATION NETWORK DENSITY ---")
-        print(f"HAN:      Direct citations: {han['citation_network']['direct_citations']}, Density: {han['citation_network']['network_density']:.2%}")
-        print(f"Semantic: Direct citations: {sem['citation_network']['direct_citations']}, Density: {sem['citation_network']['network_density']:.2%}")
-        print(f"Winner: {'🏆 HAN' if han['citation_network']['network_density'] > sem['citation_network']['network_density'] else '🏆 Semantic' if sem['citation_network']['network_density'] > han['citation_network']['network_density'] else '🤝 Tie'}")
-        
-        print("\n--- SEMANTIC RELEVANCE (TF-IDF) ---")
-        print(f"HAN:      Avg: {han['semantic_relevance']['avg_tfidf_score']:.3f}, Range: [{han['semantic_relevance']['min_tfidf_score']:.3f}, {han['semantic_relevance']['max_tfidf_score']:.3f}]")
-        print(f"Semantic: Avg: {sem['semantic_relevance']['avg_tfidf_score']:.3f}, Range: [{sem['semantic_relevance']['min_tfidf_score']:.3f}, {sem['semantic_relevance']['max_tfidf_score']:.3f}]")
-        print(f"Winner: {'🏆 HAN' if han['semantic_relevance']['avg_tfidf_score'] > sem['semantic_relevance']['avg_tfidf_score'] else '🏆 Semantic' if sem['semantic_relevance']['avg_tfidf_score'] > han['semantic_relevance']['avg_tfidf_score'] else '🤝 Tie'}")
-        
-        print("\n--- COVERAGE SCORE ---")
-        print(f"HAN:      {han['coverage_score']:.2%}")
-        print(f"Semantic: {sem['coverage_score']:.2%}")
-        print(f"Winner: {'🏆 HAN' if han['coverage_score'] > sem['coverage_score'] else '🏆 Semantic' if sem['coverage_score'] > han['coverage_score'] else '🤝 Tie'}")
-        
-        print("\n--- NDCG (Ranking Quality) ---")
-        print(f"HAN:      {han['ndcg']:.3f}")
-        print(f"Semantic: {sem['ndcg']:.3f}")
-        print(f"Winner: {'🏆 HAN' if han['ndcg'] > sem['ndcg'] else '🏆 Semantic' if sem['ndcg'] > han['ndcg'] else '🤝 Tie'}")
-        
-        # NEW: HAN-Specific Advantage Analysis
-        print("\n--- HAN ADVANTAGE ANALYSIS ---")
-        adv = results.get('han_advantage', {})
-        if adv and 'han_graph_advantage' in adv:
-            print(f"Graph Advantage Score: {adv['han_graph_advantage']:.2%}")
-            print(f"HAN Finds More Influential Papers: {'✅ YES' if adv['han_finds_influential'] else '❌ NO'}")
-            if 'han_unique_avg_citations' in adv and 'semantic_unique_avg_citations' in adv:
-                print(f"  - HAN unique papers avg citations: {adv['han_unique_avg_citations']:.1f}")
-                print(f"  - Semantic unique papers avg citations: {adv['semantic_unique_avg_citations']:.1f}")
-            print(f"HAN Builds More Coherent Set: {'✅ YES' if adv['han_builds_coherent_set'] else '❌ NO'}")
-            if 'han_cocitation_connections' in adv and 'semantic_cocitation_connections' in adv:
-                print(f"  - HAN co-citation connections: {adv['han_cocitation_connections']}")
-                print(f"  - Semantic co-citation connections: {adv['semantic_cocitation_connections']}")
-            print(f"Explanation: {adv['explanation']}")
-        else:
-            print("HAN advantage analysis not available")
-        
-        # Determine overall winner with expanded metrics
-        print("\n" + "="*70)
-        scores = {
-            'han': 0,
-            'semantic': 0
-        }
-        
-        # Original metrics
-        if han['diversity']['venue_diversity'] > sem['diversity']['venue_diversity']:
-            scores['han'] += 1
-        elif sem['diversity']['venue_diversity'] > han['diversity']['venue_diversity']:
-            scores['semantic'] += 1
-        
-        if han['novelty'] > sem['novelty']:
-            scores['han'] += 1
-        elif sem['novelty'] > han['novelty']:
-            scores['semantic'] += 1
-        
-        if han['citation_coverage']['avg_citations'] > sem['citation_coverage']['avg_citations']:
-            scores['han'] += 1
-        elif sem['citation_coverage']['avg_citations'] > han['citation_coverage']['avg_citations']:
-            scores['semantic'] += 1
-        
-        # Graph structure score (average of all 4 metrics)
-        han_graph_avg = np.mean(list(han['graph_structure_score'].values()))
-        sem_graph_avg = np.mean(list(sem['graph_structure_score'].values()))
-        if han_graph_avg > sem_graph_avg:
-            scores['han'] += 1
-        elif sem_graph_avg > han_graph_avg:
-            scores['semantic'] += 1
-        
-        # New metrics
-        if han['author_network']['author_diversity'] > sem['author_network']['author_diversity']:
-            scores['han'] += 1
-        elif sem['author_network']['author_diversity'] > han['author_network']['author_diversity']:
-            scores['semantic'] += 1
-        
-        if han['citation_network']['network_density'] > sem['citation_network']['network_density']:
-            scores['han'] += 1
-        elif sem['citation_network']['network_density'] > han['citation_network']['network_density']:
-            scores['semantic'] += 1
-        
-        if han['coverage_score'] > sem['coverage_score']:
-            scores['han'] += 1
-        elif sem['coverage_score'] > han['coverage_score']:
-            scores['semantic'] += 1
-        
-        if han['ndcg'] > sem['ndcg']:
-            scores['han'] += 1
-        elif sem['ndcg'] > han['ndcg']:
-            scores['semantic'] += 1
-        
-        total_metrics = 8
-        print(f"OVERALL WINNER: ", end="")
-        if scores['han'] > scores['semantic']:
-            print(f"🏆 HAN ({scores['han']}/{total_metrics} metrics)")
-        elif scores['semantic'] > scores['han']:
-            print(f"🏆 Semantic ({scores['semantic']}/{total_metrics} metrics)")
-        else:
-            print(f"🤝 TIE ({scores['han']}/{total_metrics} metrics each)")
-        print("="*70)
-        
-        return scores
-    
-    def print_top_papers_comparison(self, results: Dict[str, Dict], top_n: int = 5):
-        """Print top-N papers from both methods side by side"""
-        han_recs = results['han']['recommendations'][:top_n]
-        sem_recs = results['semantic']['recommendations'][:top_n]
-        
-        print("\n" + "="*70)
-        print(f"📄 TOP-{top_n} PAPERS COMPARISON")
-        print("="*70)
-        
-        print("\n🔷 HAN-based Recommendations:")
-        for rec in han_recs:
-            print(f"  {rec['rank']}. {rec.get('title', 'Unknown')}")
-            print(f"     Score: {rec['similarity_score']:.3f} | Venue: {rec.get('venue', 'N/A')}")
-        
-        print("\n🔶 Pure Semantic Recommendations:")
-        for rec in sem_recs:
-            print(f"  {rec['rank']}. {rec.get('title', 'Unknown')}")
-            print(f"     Score: {rec['similarity_score']:.3f} | Venue: {rec.get('venue', 'N/A')}")
 
 
 def main():
-    """Run evaluation on test queries"""
+    """Simple test: HAN vs SBERT graph utilization"""
     print("="*70)
-    print("🔬 Retrieval Evaluation: HAN vs Pure Semantic")
+    print("🔬 HAN Graph Utilization Sanity Check")
     print("="*70)
     
     load_dotenv()
@@ -824,53 +200,56 @@ def main():
     
     evaluator = RetrievalEvaluator(recommender)
     
-    # Test queries
-    test_queries = [
-        "graph neural networks for recommender systems",
-        "attention mechanisms in deep learning",
-        "knowledge graph embedding methods",
-        "social network analysis using graph theory"
-    ]
+    # Test query
+    test_query = "graph neural networks for recommender systems"
+    print(f"\n📊 Test Query: {test_query}\n")
     
-    all_results = []
+    # Get recommendations
+    han_recs = evaluator.get_han_recommendations(test_query, top_k=10)
+    sem_recs = evaluator.get_semantic_recommendations(test_query, top_k=10)
     
-    for query in test_queries:
-        results = evaluator.evaluate_query(query, top_k=10)
-        evaluator.print_evaluation_report(results)
-        evaluator.print_top_papers_comparison(results, top_n=5)
-        all_results.append(results)
+    if not han_recs or not sem_recs:
+        print("❌ Failed to get recommendations")
+        return
     
-    # Aggregate statistics
-    print("\n" + "="*70)
-    print("📈 AGGREGATE STATISTICS (Across All Queries)")
+    # Calculate graph structure scores
+    han_graph = evaluator.calculate_graph_structure_score(han_recs)
+    sem_graph = evaluator.calculate_graph_structure_score(sem_recs)
+    
+    # Calculate totals
+    han_total = sum(han_graph.values())
+    sem_total = sum(sem_graph.values())
+    
+    # Print results
+    print("="*70)
+    print("GRAPH STRUCTURE UTILIZATION COMPARISON")
     print("="*70)
     
-    han_wins = sum(1 for r in all_results if 
-                   r['han']['diversity']['venue_diversity'] > r['semantic']['diversity']['venue_diversity'])
-    sem_wins = sum(1 for r in all_results if 
-                   r['semantic']['diversity']['venue_diversity'] > r['han']['diversity']['venue_diversity'])
+    print(f"\n🔷 HAN Results:")
+    print(f"  Co-citation score:      {han_graph['cocitation_score']:.3f}")
+    print(f"  Citation connectivity:  {han_graph['citation_connectivity']:.3f}")
+    print(f"  Author overlap:         {han_graph['author_overlap_score']:.3f}")
+    print(f"  Keyword coherence:      {han_graph['keyword_coherence']:.3f}")
+    print(f"  → Total:                {han_total:.3f}")
     
-    print(f"\nVenue Diversity: HAN wins {han_wins}/{len(test_queries)}, Semantic wins {sem_wins}/{len(test_queries)}")
+    print(f"\n🔶 Pure Semantic Results:")
+    print(f"  Co-citation score:      {sem_graph['cocitation_score']:.3f}")
+    print(f"  Citation connectivity:  {sem_graph['citation_connectivity']:.3f}")
+    print(f"  Author overlap:         {sem_graph['author_overlap_score']:.3f}")
+    print(f"  Keyword coherence:      {sem_graph['keyword_coherence']:.3f}")
+    print(f"  → Total:                {sem_total:.3f}")
     
-    han_novel = np.mean([r['han']['novelty'] for r in all_results])
-    sem_novel = np.mean([r['semantic']['novelty'] for r in all_results])
-    print(f"Avg Novelty: HAN {han_novel:.2%}, Semantic {sem_novel:.2%}")
-    
-    han_citations = np.mean([r['han']['citation_coverage']['avg_citations'] for r in all_results])
-    sem_citations = np.mean([r['semantic']['citation_coverage']['avg_citations'] for r in all_results])
-    print(f"Avg Citations: HAN {han_citations:.1f}, Semantic {sem_citations:.1f}")
-    
-    # Calculate average graph structure score across all queries
-    han_graph_scores = [np.mean(list(r['han']['graph_structure_score'].values())) for r in all_results]
-    sem_graph_scores = [np.mean(list(r['semantic']['graph_structure_score'].values())) for r in all_results]
-    han_graph = np.mean(han_graph_scores)
-    sem_graph = np.mean(sem_graph_scores)
-    print(f"Avg Graph Score: HAN {han_graph:.2%}, Semantic {sem_graph:.2%}")
-    
-    avg_overlap = np.mean([r['comparison']['overlap_ratio'] for r in all_results])
-    print(f"\nAvg Ranking Overlap: {avg_overlap:.1%}")
-    
-    print("\n✅ Evaluation complete!")
+    # Verdict
+    print("\n" + "="*70)
+    if han_total > sem_total:
+        improvement = ((han_total / sem_total) - 1) * 100 if sem_total > 0 else float('inf')
+        print(f"✅ PASS: HAN utilizes graph structure better (+{improvement:.1f}%)")
+    elif han_total == sem_total:
+        print("⚠️ WARN: HAN and Semantic show equal graph utilization")
+    else:
+        degradation = ((sem_total / han_total) - 1) * 100 if han_total > 0 else float('inf')
+        print(f"❌ FAIL: HAN underperforms pure semantic (-{degradation:.1f}%)")
+    print("="*70)
 
 
 if __name__ == "__main__":
