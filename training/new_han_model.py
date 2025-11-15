@@ -386,10 +386,12 @@ class GraphEmbeddingTrainer:
         print("\nStep 3: Preparing node features...")
         node_features = self.prepare_node_features(data_dict)
         
+        cites_etype_tuple = ('paper', 'cites', 'paper')
+
         # Ensure 'cites' edge type exists for link prediction
-        if 'cites' not in graph.etypes:
-            print("❌ Error: 'cites' edge type not found in graph.")
-            print("   Link prediction training requires ('paper', 'cites', 'paper') relationships.")
+        if cites_etype_tuple not in graph.canonical_etypes:
+            print(f"❌ Error: Canonical edge type {cites_etype_tuple} not found in graph.")
+            print(f"   Available types: {graph.canonical_etypes}")
             print("   Please check your Neo4j data and import process.")
             return None
         
@@ -425,30 +427,32 @@ class GraphEmbeddingTrainer:
         # 3. Create Dataloader for Link Prediction
         print("\nStep 5: Setting up Link Prediction Dataloader...")
         
-        # We only want to predict links between papers
-        # Get all the 'cites' edge IDs
-        paper_cites_eids = graph.edge_ids(
-            et='cites', 
-            etype=('paper', 'cites', 'paper')
-        )
+        # --- THIS IS THE FIX ---
+        # Get the total number of 'cites' edges
+        num_cites_edges = graph.num_edges(cites_etype_tuple)
         
-        if len(paper_cites_eids) == 0:
+        if num_cites_edges == 0:
             print("❌ Error: No 'cites' edges found in the graph.")
             print("   Cannot perform link prediction training. Check your data filtering.")
             return None
+
+        # Create a tensor of all edge IDs, from 0 to N-1
+        # This replaces the buggy graph.edge_ids() call
+        paper_cites_eids = torch.arange(num_cites_edges, device=self.device)
+        # --- END OF FIX ---
         
         # Create a negative sampler
         # For every 1 'cites' edge, create 5 'fake' (negative) edges
         sampler = dgl.sampling.GlobalNegativeSampling(
             g=graph, 
             k=5, 
-            etype=('paper', 'cites', 'paper')
+            etype=cites_etype_tuple # Use the tuple
         )
         
         # Create an EdgeDataLoader to iterate over batches of edges
         dataloader = dgl.dataloading.EdgeDataLoader(
             graph, 
-            {('paper', 'cites', 'paper'): paper_cites_eids},
+            {cites_etype_tuple: paper_cites_eids}, # Use the tuple
             sampler,
             batch_size=1024,
             shuffle=True,
@@ -509,9 +513,9 @@ class GraphEmbeddingTrainer:
                 # Sampler gives k=5 negatives, so we must reshape
                 
                 # Reshape neg_score: [batch_size * k] -> [batch_size, k]
-                neg_score = neg_score.view(-1, 5)
+                neg_score_k = neg_score.view(-1, 5)
                 # Average the scores of the 5 negative samples
-                neg_score_mean = neg_score.mean(1)
+                neg_score_mean = neg_score_k.mean(1)
                 
                 loss = loss_fn(pos_score, neg_score_mean, y)
                 
@@ -589,8 +593,8 @@ if __name__ == "__main__":
     DEBUG_CONFIG = {
         'NEO4J_URI': "neo4j://127.0.0.1:7687",
         'NEO4J_USERNAME': "neo4j",
-        'NEO4J_PASSWORD': "12345678", # <-- Use your password
-        'SAMPLE_SIZE': 20000,          # <-- Use your new focused dataset size
+        'NEO4J_PASSWORD': "12345678", # <-- Use your password for the FOCUSED DB
+        'SAMPLE_SIZE': None,           # <-- Set to None to use your whole focused DB
         'EPOCHS': 50,                  # <-- Start with 50-100 epochs
         'LEARNING_RATE': 0.001,
         'SAVE_DIR': 'models/link_prediction_v1', # <-- New save dir
@@ -663,7 +667,6 @@ if __name__ == "__main__":
 
         print(f"\n📁 Output files:")
         print(f"   • {SAVE_DIR}/han_embeddings.pth - Model and embeddings")
-        print(f"   • {SAVE_DIR}/summary.json - Training summary (if you re-add it)")
 
     except Exception as e:
         print(f"\n❌ Training failed: {e}")
@@ -673,5 +676,5 @@ if __name__ == "__main__":
         print("   1. Check Neo4j is running and accessible (URI, user, password).")
         print("   2. Ensure your focused dataset is imported and has 'CITES' links.")
         print("   3. Install required packages: pip install torch dgl sentence-transformers py2neo")
-        print("   4. Reduce SAMPLE_SIZE if you run out of memory (OOM).")
+        print("   4. Reduce 'batch_size' in 'train_model' if you run out of memory (OOM).")
         exit(1)
