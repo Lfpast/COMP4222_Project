@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 import json
 # --- NEW IMPORTS ---
 import dgl.dataloading
-# We will import dgl.sampling inside the function to handle versioning
+import dgl.sampling  # We now import the correct module
 # --- END NEW IMPORTS ---
 
 class HANModel(nn.Module):
@@ -437,41 +437,28 @@ class GraphEmbeddingTrainer:
             return None
 
         # Create a tensor of all edge IDs, from 0 to N-1
-        # This replaces the buggy graph.edge_ids() call
         paper_cites_eids = torch.arange(num_cites_edges, device=self.device)
+        
+        
+        # --- ROBUST FIX for DGL Versioning ---
+        # We will try multiple known locations for the negative sampler
+        
+        print("   Checking for DGL negative sampler...")
+        
+        # --- FIX: REMOVED all old sampler logic ---
+        # The sampler object is no longer passed to the dataloader.
+        # We will call the sampling function manually inside the loop.
+        print("   ✅ Using manual negative sampling with 'dgl.sampling.global_uniform_negative_sampling'.")
+        
         # --- END OF FIX ---
         
-        # Create a negative sampler
-        # For every 1 'cites' edge, create 5 'fake' (negative) edges
-        
-        # --- THIS IS THE FIX for AttributeError ---
-        # Handles DGL 0.8 vs 0.9+ API change
-        try:
-            # DGL 0.9+
-            import dgl.sampling
-            sampler = dgl.sampling.GlobalNegativeSampling(
-                g=graph, 
-                k=5, 
-                etype=cites_etype_tuple
-            )
-            print("   Using 'dgl.sampling.GlobalNegativeSampling' (DGL 0.9+)")
-        except (ImportError, AttributeError):
-            # DGL 0.8
-            print("   ⚠️  'dgl.sampling' not found. Falling back to 'dgl.dataloading.GlobalNegativeSampler'. (DGL 0.8)")
-            # Note the different name: GlobalNegativeSampler (not Sampling)
-            import dgl.dataloading
-            sampler = dgl.dataloading.GlobalNegativeSampler(
-                g=graph, 
-                k=5, 
-                etype=cites_etype_tuple
-            )
-        # --- END OF FIX ---
         
         # Create an EdgeDataLoader to iterate over batches of edges
+        # --- FIX: Removed the 'sampler' argument ---
         dataloader = dgl.dataloading.EdgeDataLoader(
             graph, 
             {cites_etype_tuple: paper_cites_eids}, # Use the tuple
-            sampler,
+            # sampler,  <-- THIS ARGUMENT IS REMOVED
             batch_size=1024,
             shuffle=True,
             drop_last=False,
@@ -502,15 +489,14 @@ class GraphEmbeddingTrainer:
             # This is less efficient than subgraph sampling, but correct for this model
             embeddings = model(graph, node_features)
             
-            for input_nodes, positive_graph, negative_graph, blocks in pbar:
+            # --- FIX: Loop signature changed. 'negative_graph' is no longer provided. ---
+            for input_nodes, positive_graph, blocks in pbar:
                 # input_nodes: All nodes needed for computation
                 # positive_graph: A graph with only the "real" edges for this batch
-                # negative_graph: A graph with only the "fake" edges for this batch
                 # blocks: Subgraphs for sampled GNN (we ignore this, using full-graph)
                 
                 # Move graphs to device
                 positive_graph = positive_graph.to(self.device)
-                negative_graph = negative_graph.to(self.device)
                 
                 # 1. Calculate scores for positive and negative edges
                 # Pass the *full* embeddings tensor to the predictor
@@ -518,8 +504,31 @@ class GraphEmbeddingTrainer:
                 # Score the "real" edges
                 pos_score = predictor(positive_graph, embeddings, ntype='paper')
                 
-                # Score the "fake" edges
+                # --- FIX: Manually create the negative graph ---
+                
+                # 1. Define negative sampling parameters
+                k = 5 # Number of negative samples per positive edge
+                num_pos_edges = positive_graph.num_edges()
+                cites_etype_id = graph.get_etype_id('cites')
+                
+                # 2. Call the *correct* sampling function
+                neg_srcdst = dgl.sampling.global_uniform_negative_sampling(
+                    graph, 
+                    num_pos_edges * k, 
+                    cites_etype_id,
+                )
+                
+                # 3. Create the negative graph
+                negative_graph = dgl.heterograph(
+                    {cites_etype_tuple: neg_srcdst},
+                    num_nodes_dict={'paper': graph.num_nodes('paper')}
+                ).to(self.device)
+
+                # 4. Score the "fake" edges
                 neg_score = predictor(negative_graph, embeddings, ntype='paper')
+                
+                # --- END OF FIX ---
+                
                 
                 # 2. Calculate Loss
                 # We want pos_score to be > neg_score. The target 'y' is a tensor of 1s.
