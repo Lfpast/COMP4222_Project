@@ -1,0 +1,54 @@
+
+============================================================
+Mode: graph_enabled
+Query: What are the main papers about Graph Neural Networks in recommender systems?
+
+Based on the provided context, the main papers about Graph Neural Networks (GNNs) in recommender systems are:
+
+1.  **"Sequential Recommendation Models: A Graph-based Perspective"** by Andreas Peintner. This paper outlines research into novel graph-based methods for sequential recommendation. It positions graph-based modeling of sequences as a state-of-the-art approach that introduces a structured, inductive bias into the learning framework, alongside transformer-based architectures.
+
+2.  **"Recommendation Based on Graph Neural Network with Structural Identity"** by Wentao Bai and Congying Guo. This work addresses a limitation of standard GNNs in recommendation, which is their focus on local "community information" and their inability to capture the global "structural identity" or roles of nodes. The authors propose a model called SIGNN that captures both types of information to improve recommendation performance.
+
+3.  **"Graph Trend Filtering Networks for Recommendation"** by a team including Jiliang Tang, Wenqi Fan, and others. This paper identifies drawbacks in existing GNN-based recommender systems, such as their non-robustness to unreliable user interactions (e.g., random clicks). To address this, the authors propose the Graph Trend Filtering Networks (GTN), a method designed to capture the adaptive reliability of interactions within the graph.
+
+These three papers represent key research directions: applying GNNs to sequential recommendation, enhancing them with structural identity awareness, and making them more robust through graph trend filtering.
+============================================================
+
+============================================================
+Mode: baseline
+Query: What are the main papers about Graph Neural Networks?
+
+Based solely on the provided context, the main papers about Graph Neural Networks (GNNs) appear to be comprehensive surveys and foundational studies that review the field's taxonomy, advances, and computational capabilities.
+
+The key papers are:
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"**: This paper provides a systematic and comprehensive review of GNNs, offering a novel taxonomy and classifying up to 327 relevant literatures to present a complete panorama of the field. It also summarizes future research directions.
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"**: This work serves as a broad tutorial, covering the fundamental concepts, new research frontiers, and emerging applications of GNNs. It is also linked to a recently published book on the topic, indicating its use as a foundational resource.
+3.  **"Computational Capabilities of Graph Neural Networks"**: This is a more foundational paper that investigates the approximation properties of GNNs. It characterizes the functions that GNNs can approximate and establishes a universal approximation property for this class of neural networks, extending a key concept from classic feedforward neural networks.
+
+Together, these papers cover the landscape of GNNs from a high-level survey perspective ("Taxonomy, Advances, and Trends"), a tutorial and applications viewpoint ("Foundation, Frontiers and Applications"), and a theoretical, computational foundation ("Computational Capabilities").
+============================================================
+
+============================================================
+Mode: graph_enabled_compare
+Query: What papers discuss graph neural networks?
+
+Based on the provided context, three papers explicitly discuss Graph Neural Networks (GNNs):
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"** by Yu Zhou, Haixia Zheng, Xin Huang, Shufeng Hao, Dengao Li, and Jumin Zhao. This paper provides a systematic and comprehensive review of GNNs, offering a novel taxonomy and summarizing future research directions.
+
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"** by Peng Cui, Jian Pei, Xiaojie Guo, and Liang Zhao. This work serves as a tutorial, covering the fundamental concepts, new research frontiers, and broad applications of GNNs.
+
+3.  **"A Fair Comparison of Graph Neural Networks for Graph Classification"**. This paper focuses on the experimental evaluation and reproducibility of GNNs, specifically in the context of graph classification tasks. It re-evaluates several popular GNN models to provide a rigorous comparison.
+============================================================
+
+============================================================
+Mode: baseline_compare
+Query: What papers discuss graph neural networks?
+
+Based on the provided context, the following three papers discuss graph neural networks:
+
+1.  **"Graph Neural Networks: Taxonomy, Advances, and Trends"**: This paper provides a systematic and comprehensive review of graph neural networks, offering a novel taxonomy and summarizing future research directions.
+2.  **"Graph Neural Networks: Foundation, Frontiers and Applications"**: This paper serves as a broad tutorial, covering the fundamental concepts, new research frontiers, and emerging applications of graph neural networks.
+3.  **"A Fair Comparison of Graph Neural Networks for Graph Classification"**: This paper focuses on the experimental evaluation and reproducibility of Graph Neural Network models, specifically in the context of graph classification tasks.
+============================================================

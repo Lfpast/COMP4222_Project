@@ -6,6 +6,7 @@
 import os
 from dotenv import load_dotenv
 from graph_rag_system import AcademicRecommender, GraphRAGEngine
+import re
 
 
 class TestResults:
@@ -49,6 +50,20 @@ class TestResults:
         else:
             print(f"\n⚠️ {self.failed_tests} test(s) failed")
             return False
+
+
+def save_llm_output(query, answer, mode):
+    """
+    追加保存所有LLM输出到GraphRAG/lm_output.txt
+    """
+    filename = "lm_output.txt"
+    with open(filename, 'a', encoding='utf-8') as f:
+        f.write("\n" + "="*60 + "\n")
+        f.write(f"Mode: {mode}\n")
+        f.write(f"Query: {query}\n\n")
+        f.write(answer)
+        f.write("\n" + "="*60 + "\n")
+    print(f"   📝 LLM output appended to: {filename}")
 
 
 def test_recommender_system(results):
@@ -250,6 +265,7 @@ def test_graph_rag_engine(recommender, results):
             top_k_seeds=3,  # Use 3 for faster testing
             enable_graph_retrieval=True
         )
+        save_llm_output(test_query, answer, mode="graph_enabled")
         
         # Validation
         assert answer is not None, "Answer is None"
@@ -283,6 +299,7 @@ def test_graph_rag_engine(recommender, results):
             top_k_seeds=3,
             enable_graph_retrieval=False
         )
+        save_llm_output(test_query, answer_baseline, mode="baseline")
         
         # Validation
         assert answer_baseline is not None, "Answer is None"
@@ -310,7 +327,9 @@ def test_graph_rag_engine(recommender, results):
         test_query = "What papers discuss graph neural networks?"
         
         answer_with_graph = engine.query(test_query, top_k_seeds=3, enable_graph_retrieval=True)
+        save_llm_output(test_query, answer_with_graph, mode="graph_enabled_compare")
         answer_without_graph = engine.query(test_query, top_k_seeds=3, enable_graph_retrieval=False)
+        save_llm_output(test_query, answer_without_graph, mode="baseline_compare")
         
         # They should be different (graph context adds info)
         # But this is not a strict requirement, so we just log
