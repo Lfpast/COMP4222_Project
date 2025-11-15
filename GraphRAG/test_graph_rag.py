@@ -438,6 +438,43 @@ def test_retrieval_evaluation(recommender, results):
         results.add_test("3.3 Ranking Comparison", False, str(e))
     except Exception as e:
         results.add_test("3.3 Ranking Comparison", False, f"Unexpected error: {e}")
+    
+    # Test 3.4: HAN Advantage Score
+    print("\n--- Test 3.4: HAN Advantage Analysis ---")
+    try:
+        han_recs = eval_results['han']['recommendations']
+        sem_recs = eval_results['semantic']['recommendations']
+        
+        advantage = evaluator.calculate_han_advantage_score(han_recs, sem_recs)
+        
+        # Validation
+        assert advantage is not None, "Advantage score is None"
+        assert 'han_graph_advantage' in advantage, "Missing graph advantage"
+        assert 'han_finds_influential' in advantage, "Missing influential flag"
+        assert 'han_builds_coherent_set' in advantage, "Missing coherence flag"
+        
+        # Print results
+        print(f"   Graph Advantage: {advantage['han_graph_advantage']:.2%}")
+        print(f"   Finds Influential: {'✓' if advantage['han_finds_influential'] else '✗'}")
+        print(f"   Builds Coherent Set: {'✓' if advantage['han_builds_coherent_set'] else '✗'}")
+        print(f"   Explanation: {advantage['explanation']}")
+        
+        # HAN should ideally outperform on at least one dimension
+        has_advantage = (advantage['han_finds_influential'] or 
+                        advantage['han_builds_coherent_set'] or 
+                        advantage['han_graph_advantage'] > 0)
+        
+        if has_advantage:
+            print("   ✅ HAN demonstrates graph-aware advantage!")
+        else:
+            print("   ⚠️ HAN did not outperform semantic on this query")
+        
+        results.add_test("3.4 HAN Advantage Analysis", True)
+        
+    except AssertionError as e:
+        results.add_test("3.4 HAN Advantage Analysis", False, str(e))
+    except Exception as e:
+        results.add_test("3.4 HAN Advantage Analysis", False, f"Unexpected error: {e}")
 
 
 def main():
