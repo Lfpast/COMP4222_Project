@@ -4,7 +4,8 @@
 This project aims to build an academic recommender and retrieval system based on heterogeneous graph neural networks (HAN) and GraphRAG (Graph Retrieval-Augmented Generation). It integrates Neo4j graph database, HAN model training, and LLM-powered retrieval to provide advanced recommendations and context-aware academic search.
 
 ## Dataset
-We use the ACM Citation Network V12 dataset to support our GraphRAG System
+We use the ACM Citation Network V12 dataset to support our GraphRAG System.
+We perform some feature selection rather than using all of the attributes.
 https://opendata.aminer.cn/dataset/ACM-Citation-network-V12.zip
 
 ## Repository Structure
