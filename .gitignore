@@ -1,9 +1,7 @@
 # Data files
-data/
-data/*
 data/raw/
 data/processed/
-.txt
+data/focused_v1
 
 # Python
 __pycache__/

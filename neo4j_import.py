@@ -2,15 +2,13 @@ from py2neo import Graph
 import pandas as pd
 import os
 from tqdm import tqdm
+import argparse
 
 class Neo4jGraphBuilder:
-    def __init__(self, uri="bolt://localhost:7687", username="neo4j", password="your_password", dataset_type="combined"):
-        """Initialize Neo4j connection
+    def __init__(self, uri, username, password, data_dir, batch_size):
+        self.data_dir = data_dir
+        self.batch_size = batch_size
         
-        Args:
-            dataset_type: "train", "test", or "combined" (default)
-        """
-        self.dataset_type = dataset_type
         try:
             self.graph = Graph(uri, auth=(username, password))
             # Test connection
@@ -23,9 +21,6 @@ class Neo4jGraphBuilder:
             print("   2. URI is correct (default: bolt://localhost:7687)")
             print("   3. Username and password are correct")
             raise
-        
-        # Set data directory based on dataset type
-        self.data_dir = f"data/{dataset_type}"
         
     def clear_database(self):
         """Clear existing data with batching to avoid memory issues"""
@@ -43,7 +38,6 @@ class Neo4jGraphBuilder:
             return
         
         # Use batch deletion to avoid memory issues
-        batch_size = 1000000
         deleted = 0
         
         # Create progress bar
@@ -52,7 +46,7 @@ class Neo4jGraphBuilder:
         while True:
             result = self.graph.run(f"""
             MATCH (n) 
-            WITH n LIMIT {batch_size}
+            WITH n LIMIT {self.batch_size}
             DETACH DELETE n
             RETURN count(*) as deleted
             """).data()
@@ -101,10 +95,9 @@ class Neo4jGraphBuilder:
         papers_df = papers_df.fillna('')
         
         # Batch import - using UNWIND for better performance
-        batch_size = 1000000
         with tqdm(total=len(papers_df), desc="Papers", unit="paper") as pbar:
-            for i in range(0, len(papers_df), batch_size):
-                batch = papers_df.iloc[i:i+batch_size]
+            for i in range(0, len(papers_df), self.batch_size):
+                batch = papers_df.iloc[i:i+self.batch_size]
                 papers_data = batch.to_dict('records')
                 
                 query = """
@@ -129,8 +122,8 @@ class Neo4jGraphBuilder:
         authors_df = authors_df.fillna('')
         
         with tqdm(total=len(authors_df), desc="Authors", unit="author") as pbar:
-            for i in range(0, len(authors_df), batch_size):
-                batch = authors_df.iloc[i:i+batch_size]
+            for i in range(0, len(authors_df), self.batch_size):
+                batch = authors_df.iloc[i:i+self.batch_size]
                 authors_data = batch.to_dict('records')
                 
                 query = """
@@ -152,8 +145,8 @@ class Neo4jGraphBuilder:
         keywords_df = keywords_df.fillna('')
         
         with tqdm(total=len(keywords_df), desc="Keywords", unit="keyword") as pbar:
-            for i in range(0, len(keywords_df), batch_size):
-                batch = keywords_df.iloc[i:i+batch_size]
+            for i in range(0, len(keywords_df), self.batch_size):
+                batch = keywords_df.iloc[i:i+self.batch_size]
                 keywords_data = batch.to_dict('records')
                 
                 query = """
@@ -171,7 +164,6 @@ class Neo4jGraphBuilder:
     def import_relationships(self):
         """Import relationship data in batches"""
         print("\n🔗 Importing relationships...")
-        batch_size = 1000000
         
         # WRITTEN_BY relationship
         print("\n✍️  Creating WRITTEN_BY relationships...")
@@ -179,8 +171,8 @@ class Neo4jGraphBuilder:
         written_by_df = written_by_df.fillna('')
         
         with tqdm(total=len(written_by_df), desc="WRITTEN_BY", unit="rel") as pbar:
-            for i in range(0, len(written_by_df), batch_size):
-                batch = written_by_df.iloc[i:i+batch_size]
+            for i in range(0, len(written_by_df), self.batch_size):
+                batch = written_by_df.iloc[i:i+self.batch_size]
                 rels_data = batch.to_dict('records')
                 
                 query = """
@@ -200,8 +192,8 @@ class Neo4jGraphBuilder:
         cites_df = cites_df.fillna('')
         
         with tqdm(total=len(cites_df), desc="CITES", unit="rel") as pbar:
-            for i in range(0, len(cites_df), batch_size):
-                batch = cites_df.iloc[i:i+batch_size]
+            for i in range(0, len(cites_df), self.batch_size):
+                batch = cites_df.iloc[i:i+self.batch_size]
                 rels_data = batch.to_dict('records')
                 
                 query = """
@@ -221,8 +213,8 @@ class Neo4jGraphBuilder:
         has_keyword_df = has_keyword_df.fillna('')
         
         with tqdm(total=len(has_keyword_df), desc="HAS_KEYWORD", unit="rel") as pbar:
-            for i in range(0, len(has_keyword_df), batch_size):
-                batch = has_keyword_df.iloc[i:i+batch_size]
+            for i in range(0, len(has_keyword_df), self.batch_size):
+                batch = has_keyword_df.iloc[i:i+self.batch_size]
                 rels_data = batch.to_dict('records')
                 
                 query = """
@@ -295,61 +287,22 @@ class Neo4jGraphBuilder:
         
 
 if __name__ == "__main__":
-    import sys
-    
-    print("=" * 70)
-    print("🚀 Neo4j Academic Graph Import")
-    print("=" * 70)
-    
-    # Check command line argument
-    if len(sys.argv) > 1:
-        dataset_type = sys.argv[1].lower()
-    else:
-        dataset_type = "data" # THIS SHOULD BE AVOIDED!
+    parser = argparse.ArgumentParser(description="Run Neo4j Import Pipeline")
+    parser.add_argument('--uri', type=str, required=True, help="Neo4j connection URI")
+    parser.add_argument('--username', type=str, required=True, help="Neo4j username")
+    parser.add_argument('--password', type=str, required=True, help="Neo4j password")
+    parser.add_argument('--data_dir', type=str, required=True, help="Data directory path (e.g., data/processed)")
+    parser.add_argument('--batch_size', type=int, required=True, help="Batch size for import operations")
+    args = parser.parse_args()
 
-    print(f"\n📊 Dataset: {dataset_type.upper()}")
-    data_dir = "data/" + dataset_type
-
-    print(f"📁 Data directory: {data_dir}/")
-    
-    print("\n⚠️  MEMORY CONFIGURATION TIPS:")
-    print("   If you encounter 'MemoryPoolOutOfMemoryError', update Neo4j memory:")
-    print("   Edit neo4j.conf and change:")
-    print("      server.memory.heap.initial_size=2g")
-    print("      server.memory.heap.max_size=4g")
-    print("      server.memory.pagecache.size=2g")
-    print("      server.memory.transaction.total.max=2g (uncomment if commented)")
-    print("   Then restart Neo4j and run this script again")
-    print("=" * 70)
-
-    NEO4J_URI = f"neo4j://127.0.0.1:7687"
-    NEO4J_USERNAME = "neo4j"  # Default username
-    NEO4J_PASSWORD = "12345678"
-    
-    print(f"\n⚙️  Configuration:")
-    print(f"   URI: {NEO4J_URI}")
-    print(f"   Username: {NEO4J_USERNAME}")
-    print(f"   Password: {'*' * len(NEO4J_PASSWORD)}")
-    print(f"   Data directory: {data_dir}/")
-    
-    # Confirm database clear
-    print("\n⚠️  WARNING: This will clear all existing data in the Neo4j database!")
-    response = input("Continue? (yes/no): ").strip().lower()
-    
-    if response != 'yes':
-        print("❌ Import cancelled")
-        exit(0)
-    
     try:
-        # Initialize importer with dataset type
         builder = Neo4jGraphBuilder(
-            uri=NEO4J_URI,
-            username=NEO4J_USERNAME,
-            password=NEO4J_PASSWORD,
-            dataset_type=dataset_type
+            uri=args.uri,
+            username=args.username,
+            password=args.password,
+            data_dir=args.data_dir,
+            batch_size=args.batch_size
         )
-        
-        # Execute import workflow
         builder.clear_database()
         builder.create_constraints()
         builder.import_nodes()
@@ -359,14 +312,7 @@ if __name__ == "__main__":
         print("\n" + "=" * 70)
         print("✅ Import completed successfully!")
         print("=" * 70)
-        print(f"\n📊 Imported dataset: {dataset_type.upper()}")
-        print("\n💡 You can now use Neo4j Browser to explore the graph:")
-        print("   http://localhost:7474")
-        print("\n📋 Example Cypher queries:")
-        print("   • Find a paper: MATCH (p:Paper) WHERE p.title CONTAINS 'neural' RETURN p LIMIT 10")
-        print("   • Author collaboration: MATCH (a1:Author)<-[:WRITTEN_BY]-(p)-[:WRITTEN_BY]->(a2:Author)")
-        print("     WHERE a1.name = 'John Doe' RETURN a2.name, count(p) ORDER BY count(p) DESC")
-        print("   • Citation network: MATCH (p1:Paper)-[:CITES*1..2]->(p2:Paper) RETURN p1, p2 LIMIT 50")
+        print(f"\n📊 Imported data from: {args.data_dir}")
         
     except Exception as e:
         print(f"\n❌ Import failed: {e}")

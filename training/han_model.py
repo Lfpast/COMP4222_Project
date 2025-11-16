@@ -13,10 +13,9 @@ import os
 import time
 from datetime import datetime, timedelta
 import json
-# --- NEW IMPORTS ---
 import dgl.dataloading
-import dgl.sampling  # We now import the correct module
-# --- END NEW IMPORTS ---
+import dgl.sampling 
+import argparse
 
 class HANModel(nn.Module):
     def __init__(self, in_dim, hidden_dim, out_dim, num_heads, meta_paths):
@@ -61,7 +60,7 @@ class HANModel(nn.Module):
         # This is the "graph signal"
         h_graph = {k: self.output_projection(v) for k, v in h.items()}
         
-        # --- CRITICAL FIX: Normalize graph signal BEFORE residual connection ---
+        # --- Normalize graph signal BEFORE residual connection ---
         # Without this, h_graph can be very large (norm=20-50), which dominates
         # the residual connection and destroys semantic information
         h_graph_normalized = {k: F.normalize(v, p=2, dim=1) for k, v in h_graph.items()}
@@ -79,7 +78,6 @@ class HANModel(nn.Module):
             else:
                 # For other node types, just use normalized graph signal
                 h_final[k] = h_graph_normalized[k]
-        # --- END OF FIX ---
 
         # Apply batch normalization (optional, usually not needed after normalization)
         if apply_batchnorm and self.training:
@@ -627,91 +625,49 @@ class GraphEmbeddingTrainer:
     # --- END OF MODIFIED FUNCTION ---
 
 if __name__ == "__main__":
-    import sys
+    parser = argparse.ArgumentParser(description="Train HAN model for academic graph link prediction.")
 
-    # ===================== DEBUG CONFIGURATION =====================
-    DEBUG_MODE = True  # Set to True to use the config below
-    # Only used if DEBUG_MODE=True
-    DEBUG_CONFIG = {
-        'NEO4J_URI': "neo4j://127.0.0.1:7687",
-        'NEO4J_USERNAME': "neo4j",
-        'NEO4J_PASSWORD': "12345678", # <-- Use your password for the FOCUSED DB
-        'SAMPLE_SIZE': None,           # <-- Set to None to use your whole focused DB
-        'EPOCHS': 50,                  # <-- Start with 50-100 epochs
-        'LEARNING_RATE': 0.001,
-        'SAVE_DIR': 'models/link_prediction_v4', # <-- New save dir
-        'HIDDEN_DIM': 128,
-        'OUT_DIM': 384,
-        'NUM_HEADS': 8
-    }
-    # ===================== END DEBUG CONFIGURATION =================
+    # 添加命令行参数
+    parser.add_argument("--neo4j_uri", type=str, required=True, help="Neo4j database URI")
+    parser.add_argument("--neo4j_username", type=str, required=True, help="Neo4j username")
+    parser.add_argument("--neo4j_password", type=str, required=True, help="Neo4j password")
+    parser.add_argument("--sample_size", type=str, default=None, help="Sample size for training (None for all data)")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("--learning_rate", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--save_dir", type=str, default="models", help="Directory to save trained models")
+    parser.add_argument("--hidden_dim", type=int, default=192, help="Hidden dimension size")
+    parser.add_argument("--out_dim", type=int, default=384, help="Output dimension size")
+    parser.add_argument("--num_heads", type=int, default=4, help="Number of attention heads")
+
+    args = parser.parse_args()
 
     print("=" * 70)
     print("🎓 Academic Graph HAN Model Training (Link Prediction)")
     print("=" * 70)
 
-    if DEBUG_MODE:
-        NEO4J_URI = DEBUG_CONFIG['NEO4J_URI']
-        NEO4J_USERNAME = DEBUG_CONFIG['NEO4J_USERNAME']
-        NEO4J_PASSWORD = DEBUG_CONFIG['NEO4J_PASSWORD']
-        SAMPLE_SIZE = DEBUG_CONFIG['SAMPLE_SIZE']
-        EPOCHS = DEBUG_CONFIG['EPOCHS']
-        LEARNING_RATE = DEBUG_CONFIG['LEARNING_RATE']
-        SAVE_DIR = DEBUG_CONFIG['SAVE_DIR']
-        HIDDEN_DIM = DEBUG_CONFIG['HIDDEN_DIM']
-        OUT_DIM = DEBUG_CONFIG['OUT_DIM']
-        NUM_HEADS = DEBUG_CONFIG['NUM_HEADS']
-    else:
-        if len(sys.argv) != 11:
-            print("❌ Incorrect number of arguments! Please pass 10 arguments via command line:")
-            print("python han_model.py <NEO4J_URI> <NEO4J_USERNAME> <NEO4J_PASSWORD> <SAMPLE_SIZE> <EPOCHS> <LEARNING_RATE> <SAVE_DIR> <HIDDEN_DIM> <OUT_DIM> <NUM_HEADS>")
-            exit(1)
-        NEO4J_URI = sys.argv[1]
-        NEO4J_USERNAME = sys.argv[2]
-        NEO4J_PASSWORD = sys.argv[3]
-        SAMPLE_SIZE = int(sys.argv[4]) if sys.argv[4] != "None" else None
-        EPOCHS = int(sys.argv[5])
-        LEARNING_RATE = float(sys.argv[6])
-        SAVE_DIR = sys.argv[7]
-        HIDDEN_DIM = int(sys.argv[8])
-        OUT_DIM = int(sys.argv[9])
-        NUM_HEADS = int(sys.argv[10])
-
     print(f"\n⚙️  Configuration:")
-    print(f"   Neo4j URI: {NEO4J_URI}")
-    print(f"   Sample size: {SAMPLE_SIZE if SAMPLE_SIZE else 'All'} papers")
-    print(f"   Model: HIDDEN={HIDDEN_DIM}, OUT={OUT_DIM}, HEADS={NUM_HEADS}")
-    print(f"   Training: EPOCHS={EPOCHS}, LR={LEARNING_RATE}")
-    print(f"   Save directory: {SAVE_DIR}")
+    print(f"   Neo4j URI: {args.neo4j_uri}")
+    print(f"   Sample size: {args.sample_size if args.sample_size else 'All'} papers")
+    print(f"   Model: HIDDEN={args.hidden_dim}, OUT={args.out_dim}, HEADS={args.num_heads}")
+    print(f"   Training: EPOCHS={args.epochs}, LR={args.learning_rate}")
+    print(f"   Save directory: {args.save_dir}")
 
     try:
-        # Initialize trainer
         trainer = GraphEmbeddingTrainer(
-            neo4j_uri=NEO4J_URI,
-            neo4j_username=NEO4J_USERNAME,
-            neo4j_password=NEO4J_PASSWORD
+            neo4j_uri=args.neo4j_uri,
+            neo4j_username=args.neo4j_username,
+            neo4j_password=args.neo4j_password
         )
 
-        # Train model
-        model, graph, embeddings, id_maps = trainer.train_model(
-            sample_size=SAMPLE_SIZE,
-            epochs=EPOCHS,
-            lr=LEARNING_RATE,
-            save_dir=SAVE_DIR,
-            hidden_dim=HIDDEN_DIM,
-            out_dim=OUT_DIM,
-            num_heads=NUM_HEADS
+        data = trainer.load_data_from_neo4j(sample_size=args.sample_size)
+        trainer.train_model(
+            sample_size=args.sample_size,
+            epochs=args.epochs,
+            lr=args.learning_rate,
+            save_dir=args.save_dir,
+            hidden_dim=args.hidden_dim,
+            out_dim=args.out_dim,
+            num_heads=args.num_heads
         )
-
-        print("\n" + "=" * 70)
-        print("✅ All tasks completed successfully!")
-        print("=" * 70)
-
-        print(f"\n📁 Output files:")
-        print(f"   • {SAVE_DIR}/han_embeddings.pth - Model and embeddings")
-
     except Exception as e:
-        print(f"\n❌ Training failed: {e}")
-        import traceback
-        traceback.print_exc()
-        exit(1)
+        print(f"❌ An error occurred: {e}")

@@ -39,10 +39,8 @@ class AcademicRecommender:
                  neo4j_uri="neo4j://127.0.0.1:7687",
                  neo4j_username="neo4j",
                  neo4j_password="87654321"):
-        """初始化学术推荐系统"""
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # 加载训练好的嵌入
         self._emb_np_cache = {}
         print("📥 Loading trained embeddings...")
         try:
@@ -51,7 +49,6 @@ class AcademicRecommender:
             print(f"❌ Failed to load model: {e}")
             raise
         
-        # 连接Neo4j获取元数据
         print("🔌 Connecting to Neo4j...")
         try:
             self.graph_db = Graph(neo4j_uri, auth=(neo4j_username, neo4j_password))
@@ -77,7 +74,6 @@ class AcademicRecommender:
         print("✅ Recommender system initialized!")
 
     def _load_checkpoint(self, model_path: str):
-        """加载 checkpoint，并准备 embeddings 的 numpy 缓存"""
         paths_to_try = [
             model_path,
             os.path.join(os.path.dirname(__file__), model_path),
@@ -135,7 +131,6 @@ class AcademicRecommender:
         print(f"   HAN-trained types: {list(self.embeddings.keys())}")
 
     def _get_numpy_emb(self, node_type: str, use_original=True):
-        """返回指定 node_type 的 numpy 嵌入数组（缓存）"""
         cache = self._emb_np_cache if use_original else self._han_emb_cache
         embeddings_dict = self.original_embeddings if use_original else self.embeddings
         

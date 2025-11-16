@@ -2,15 +2,12 @@
 set -e
 echo "Starting Academic Graph Project Setup with Conda (Linux version)..."
 
-# 创建目录结构
 echo "Creating directory structure..."
-mkdir -p data/raw data/processed
+mkdir -p ../data/raw  ../data/processed
 
-# # 创建conda环境
 echo "Creating conda environment from environment.yml..."
 conda create -n 4222_Project python=3.10 -y
 
-# Linux下激活环境
 echo "Activating conda environment..."
 source $(conda info --base)/etc/profile.d/conda.sh
 conda activate 4222_Project
@@ -28,8 +25,6 @@ conda install matplotlib=3.6 seaborn=0.12 jupyter -y
 echo "Downloading data preprocessing packages..."
 conda install networkx requests=2.28 beautifulsoup4=4.11 lxml=4.9 tqdm=4.64 pyyaml=6.0 -y
 
-
-# PyTorch 2.2.x + CUDA 11.8
 echo "Downloading PyTorch..."
 conda install pytorch=2.2 torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia -y
 
@@ -52,17 +47,8 @@ echo "Downloading NLTK dataset and spaCy model..."
 python -c "import nltk; nltk.download(\"punkt\"); nltk.download(\"stopwords\"); nltk.download(\"wordnet\")" || echo "Warning: NLTK download had issues but continuing..."
 pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
-# 进行验证
-python verify_environment.py
+python ../verify_environment.py
 
 echo ""
 echo "Setup completed successfully!"
-echo ""
-echo "Next steps:"
-echo "1. Activate the environment: conda activate 4222_Project"
-echo "2. Start Neo4j database (if using Neo4j)"
-echo "3. Run: python scripts/data_collection.py"
-echo "4. Run: python scripts/neo4j_import.py"
-echo "5. Run: python scripts/han_model.py"
-echo ""
 echo "To deactivate the environment: conda deactivate"

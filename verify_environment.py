@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 Complete Environment Verification Script
-验证所有安装的包和功能
 """
 
 import importlib
@@ -10,7 +9,6 @@ import subprocess
 from pathlib import Path
 
 def check_package(package_name, import_name=None, min_version=None):
-    """检查包是否安装并可导入"""
     if import_name is None:
         import_name = package_name
     
@@ -18,7 +16,6 @@ def check_package(package_name, import_name=None, min_version=None):
         module = importlib.import_module(import_name)
         version = getattr(module, '__version__', 'Unknown')
         
-        # 检查最低版本要求
         if min_version and version != 'Unknown':
             from packaging import version as pkg_version
             if pkg_version.parse(version) < pkg_version.parse(min_version):
@@ -33,7 +30,6 @@ def check_package(package_name, import_name=None, min_version=None):
         return False
 
 def check_cuda():
-    """检查CUDA和GPU支持"""
     try:
         import torch
         cuda_available = torch.cuda.is_available()
@@ -57,7 +53,6 @@ def check_cuda():
         return False
 
 def check_pyg():
-    """检查PyTorch Geometric相关包"""
     pyg_packages = [
         ("torch-scatter", "torch_scatter"),
         ("torch-sparse", "torch_sparse"), 
@@ -74,7 +69,6 @@ def check_pyg():
     return all_ok
 
 def check_nlp_packages():
-    """检查NLP相关包"""
     nlp_packages = [
         ("sentence-transformers", "sentence_transformers"),
         ("transformers", "transformers"),
@@ -87,7 +81,6 @@ def check_nlp_packages():
         if not check_package(name, import_name):
             all_ok = False
     
-    # 特别检查spaCy模型
     try:
         import spacy
         nlp = spacy.load("en_core_web_sm")
@@ -99,7 +92,6 @@ def check_nlp_packages():
     return all_ok
 
 def check_data_science_packages():
-    """检查数据科学相关包"""
     ds_packages = [
         ("pandas", "pandas", "1.5.0"),
         ("numpy", "numpy", "1.23.0"),
@@ -115,7 +107,6 @@ def check_data_science_packages():
         if not check_package(name, import_name, min_version):
             all_ok = False
     
-    # 特别检查 Jupyter 相关包（不直接导入 jupyter）
     jupyter_packages = [
         ("notebook", "notebook", "6.0.0"),
         ("jupyterlab", "jupyterlab", "3.0.0"),
@@ -131,7 +122,6 @@ def check_data_science_packages():
     return all_ok
 
 def check_graph_packages():
-    """检查图相关包"""
     graph_packages = [
         ("networkx", "networkx", "3.0.0"),
         ("DGL", "dgl", "1.1.0"),
@@ -146,7 +136,6 @@ def check_graph_packages():
     return all_ok
 
 def check_package(package_name, import_name=None, min_version=None):
-    """检查包是否安装并可导入"""
     if import_name is None:
         import_name = package_name
     
@@ -169,7 +158,6 @@ def check_package(package_name, import_name=None, min_version=None):
         return False
 
 def check_patool_special():
-    """特殊检查 patool，因为它可能有导入问题"""
     try:
         import patoolib
         version = getattr(patoolib, '__version__', 'Unknown')
@@ -177,7 +165,6 @@ def check_patool_special():
         return True
     except ImportError as e:
         print(f"patool: Import failed - {e}")
-        # 尝试用 pip 检查
         try:
             result = subprocess.run([sys.executable, "-m", "pip", "show", "patool"], 
                                   capture_output=True, text=True)
@@ -191,10 +178,7 @@ def check_patool_special():
             pass
         return False
 
-# ... 其他函数保持不变，只需在 check_utility_packages 中使用 check_patool_special() ...
-
 def check_utility_packages():
-    """检查工具包"""
     print("\n🔧 Checking Utility Packages...")
     
     utility_packages = [
@@ -214,7 +198,6 @@ def check_utility_packages():
     
     all_ok = True
     
-    # 检查标准包
     for package in utility_packages:
         if len(package) == 3:
             name, import_name, min_version = package
@@ -225,20 +208,18 @@ def check_utility_packages():
             if not check_package(name, import_name):
                 all_ok = False
     
-    # 特殊检查 patool
     if not check_patool_special():
         all_ok = False
     
     return all_ok
 
 def test_basic_functionality():
-    """测试基本功能"""
     print("\nTesting Basic Functionality...")
     
     tests_passed = 0
     total_tests = 0
     
-    # 测试 PyTorch 基本功能
+    # test Pytorch functions
     try:
         import torch
         x = torch.randn(2, 3)
@@ -250,7 +231,7 @@ def test_basic_functionality():
         print(f"PyTorch tensor operations: Failed - {e}")
     total_tests += 1
     
-    # 测试 PyG 基本功能
+    # test PyG functions
     try:
         import torch_geometric
         from torch_geometric.data import Data
@@ -263,7 +244,7 @@ def test_basic_functionality():
         print(f"PyG graph creation: Failed - {e}")
     total_tests += 1
     
-    # 测试 DGL 基本功能
+    # test DGL functions
     try:
         import dgl
         import networkx as nx
@@ -275,7 +256,7 @@ def test_basic_functionality():
         print(f"DGL graph creation: Failed - {e}")
     total_tests += 1
     
-    # 测试 NLP 功能
+    # test NLP functions
     try:
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -286,7 +267,7 @@ def test_basic_functionality():
         print(f"Sentence Transformers: Failed - {e}")
     total_tests += 1
     
-    # 测试数据处理功能
+    # test data processing functions
     try:
         import pandas as pd
         import numpy as np
@@ -302,7 +283,6 @@ def test_basic_functionality():
     return tests_passed == total_tests
 
 def check_data_directories():
-    """检查数据目录结构"""
     print("\nChecking Directory Structure...")
     
     required_dirs = [
@@ -322,15 +302,14 @@ def check_data_directories():
     return all_exist
 
 def main():
-    """主验证函数"""
     print("Starting Comprehensive Environment Verification...")
     print("=" * 60)
     
-    # Python 版本
+    # Python version
     print(f"Python Version: {sys.version}")
     print("=" * 60)
     
-    # 检查所有包
+    # check all packages
     all_checks_passed = True
     
     print("\nChecking Core Packages...")
@@ -351,10 +330,10 @@ def main():
     print("\nChecking Utility Packages...")
     all_checks_passed &= check_utility_packages()
     
-    # 测试功能
+    # test functions
     all_checks_passed &= test_basic_functionality()
     
-    # 检查目录结构
+    # check directory
     all_checks_passed &= check_data_directories()
     
     print("\n" + "=" * 60)
@@ -367,11 +346,6 @@ def main():
         print("4. Run: python scripts/han_model.py")
     else:
         print("SOME CHECKS FAILED! Please review the errors above.")
-        print("\nSuggestions:")
-        print("- Check if all packages are installed correctly")
-        print("- Verify CUDA installation if GPU is required")
-        print("- Make sure spaCy model is downloaded")
-        print("- Ensure all required directories exist")
     
     return 0 if all_checks_passed else 1
 

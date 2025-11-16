@@ -175,24 +175,42 @@ class RetrievalEvaluator:
 
 def main():
     """Simple test: HAN vs SBERT graph utilization"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Evaluate HAN vs SBERT graph structure utilization")
+    parser.add_argument("--neo4j_uri", type=str, default="neo4j://127.0.0.1:7687",
+                        help="Neo4j database URI")
+    parser.add_argument("--neo4j_username", type=str, default="neo4j",
+                        help="Neo4j username")
+    parser.add_argument("--neo4j_password", type=str, default="12345678",
+                        help="Neo4j password")
+    parser.add_argument("--model_path", type=str, 
+                        default=r"training\models\focused_v1\han_embeddings.pth",
+                        help="Path to HAN model embeddings")
+    parser.add_argument("--top_k", type=int, default=10,
+                        help="Number of recommendations for evaluation")
+    parser.add_argument("--query", type=str, 
+                        default="graph neural networks for recommender systems",
+                        help="Test query for evaluation")
+    
+    args = parser.parse_args()
+    
     print("="*70)
     print("🔬 HAN Graph Utilization Sanity Check")
     print("="*70)
-    
-    load_dotenv()
-    
-    # Initialize recommender
-    MODEL_PATH = os.environ.get("MODEL_PATH", r"training\models\focused_v1\han_embeddings.pth")
-    NEO4J_URI = os.environ.get("NEO4J_URI", "neo4j://127.0.0.1:7687")
-    NEO4J_USERNAME = os.environ.get("NEO4J_USERNAME", "neo4j")
-    NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "87654321")
+    print(f"\n⚙️  Configuration:")
+    print(f"   Neo4j URI: {args.neo4j_uri}")
+    print(f"   Model Path: {args.model_path}")
+    print(f"   Top K: {args.top_k}")
+    print(f"   Test Query: {args.query}")
+    print()
     
     try:
         recommender = AcademicRecommender(
-            model_path=MODEL_PATH,
-            neo4j_uri=NEO4J_URI,
-            neo4j_username=NEO4J_USERNAME,
-            neo4j_password=NEO4J_PASSWORD
+            model_path=args.model_path,
+            neo4j_uri=args.neo4j_uri,
+            neo4j_username=args.neo4j_username,
+            neo4j_password=args.neo4j_password
         )
     except Exception as e:
         print(f"❌ Failed to initialize recommender: {e}")
@@ -201,12 +219,11 @@ def main():
     evaluator = RetrievalEvaluator(recommender)
     
     # Test query
-    test_query = "graph neural networks for recommender systems"
-    print(f"\n📊 Test Query: {test_query}\n")
+    print(f"\n📊 Test Query: {args.query}\n")
     
     # Get recommendations
-    han_recs = evaluator.get_han_recommendations(test_query, top_k=10)
-    sem_recs = evaluator.get_semantic_recommendations(test_query, top_k=10)
+    han_recs = evaluator.get_han_recommendations(args.query, top_k=args.top_k)
+    sem_recs = evaluator.get_semantic_recommendations(args.query, top_k=args.top_k)
     
     if not han_recs or not sem_recs:
         print("❌ Failed to get recommendations")

@@ -55,10 +55,16 @@ class TestResults:
 
 
 def save_llm_output(query, answer, mode):
-    """
-    追加保存所有LLM输出到GraphRAG/lm_output.txt
-    """
-    filename = "lm_output.txt"
+    # Always save to GraphRAG/llm_output.log
+    log_dir = os.path.dirname(__file__)
+    filename = os.path.join(log_dir, "llm_output.log")
+    if not os.path.exists(filename):
+        print(f"📝 File {filename} does not exist. Creating a new file.")
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write("""# LLM Output Log
+This file contains the outputs of the LLM queries.
+""")
+
     with open(filename, 'a', encoding='utf-8') as f:
         f.write("\n" + "="*60 + "\n")
         f.write(f"Mode: {mode}\n")
@@ -68,19 +74,11 @@ def save_llm_output(query, answer, mode):
     print(f"   📝 LLM output appended to: {filename}")
 
 
-def test_recommender_system(results):
+def test_recommender_system(results, model_path, neo4j_uri, neo4j_username, neo4j_password, top_k=5):
     """Test the Academic Recommender System"""
     print("\n" + "="*70)
     print("🧪 TEST 1: Academic Recommender System")
     print("="*70)
-    
-    # Load environment variables
-    load_dotenv()
-    
-    MODEL_PATH = os.environ.get("MODEL_PATH", r"training\models\focused_v1\han_embeddings.pth")
-    NEO4J_URI = os.environ.get("NEO4J_URI", "neo4j://127.0.0.1:7687")
-    NEO4J_USERNAME = os.environ.get("NEO4J_USERNAME", "neo4j")
-    NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "87654321")
     
     recommender = None
     
@@ -88,10 +86,10 @@ def test_recommender_system(results):
         # Test 1.0: Initialization
         print("\n--- Test 1.0: Recommender Initialization ---")
         recommender = AcademicRecommender(
-            model_path=MODEL_PATH,
-            neo4j_uri=NEO4J_URI,
-            neo4j_username=NEO4J_USERNAME,
-            neo4j_password=NEO4J_PASSWORD
+            model_path=model_path,
+            neo4j_uri=neo4j_uri,
+            neo4j_username=neo4j_username,
+            neo4j_password=neo4j_password
         )
         
         # Validate initialization
@@ -111,7 +109,7 @@ def test_recommender_system(results):
     try:
         content_recs = recommender.content_based_paper_recommendation(
             "graph neural networks for recommender systems", 
-            top_k=5
+            top_k=top_k
         )
         
         # Validation criteria
@@ -153,7 +151,7 @@ def test_recommender_system(results):
         target_paper = content_recs[0]['paper_id']
         collab_recs = recommender.collaborative_paper_recommendation(
             target_paper, 
-            top_k=5
+            top_k=top_k
         )
         
         # Validation criteria
@@ -512,14 +510,45 @@ def test_retrieval_evaluation(recommender, results):
 
 def main():
     """Run all tests"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="GraphRAG System Test Suite")
+    parser.add_argument("--neo4j_uri", type=str, required=True,
+                        help="Neo4j database URI")
+    parser.add_argument("--neo4j_username", type=str, required=True,
+                        help="Neo4j username")
+    parser.add_argument("--neo4j_password", type=str, required=True,
+                        help="Neo4j password")
+    parser.add_argument("--model_path", type=str, required=True,
+                        help="Path to HAN model embeddings")
+    parser.add_argument("--top_k", type=int, required=True,
+                        help="Number of recommendations for testing")
+    
+    args = parser.parse_args()
+    
     print("="*70)
     print("🚀 GraphRAG System Test Suite")
     print("="*70)
+    print(f"\n⚙️  Configuration:")
+    print(f"   Neo4j URI: {args.neo4j_uri}")
+    print(f"   Model Path: {args.model_path}")
+    print(f"   Top K: {args.top_k}")
+    print()
+    
+    # Load API key from .env (only API key is read from .env)
+    load_dotenv()
     
     results = TestResults()
     
     # Test 1: Recommender System
-    recommender = test_recommender_system(results)
+    recommender = test_recommender_system(
+        results, 
+        args.model_path, 
+        args.neo4j_uri, 
+        args.neo4j_username, 
+        args.neo4j_password,
+        args.top_k
+    )
     
     # Test 2: GraphRAG Engine (reuse recommender if successful)
     test_graph_rag_engine(recommender, results)

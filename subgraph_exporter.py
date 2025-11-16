@@ -3,6 +3,7 @@ from py2neo import Graph
 import os
 from tqdm import tqdm
 import math
+import argparse
 
 class GraphExporter:
     """
@@ -11,7 +12,7 @@ class GraphExporter:
     a new set of CSV files.
     """
     
-    def __init__(self, uri="bolt://localhost:7687", username="neo4j", password="your_password", output_dir="data/focused_v1"):
+    def __init__(self, uri, username, password, output_dir):
         """
         Initialize Neo4j connection and set output directory.
         """
@@ -47,7 +48,7 @@ class GraphExporter:
         Finds the initial set of seed paper IDs based on fuzzy venue
         matching and a list of years.
         """
-        print("\nStep 1: Finding Seed Papers (CVPR/ICLR/ICML 2020-2022)...")
+        print("\nStep 1: Finding Seed Papers (CVPR/ICLR/ICML 2019-2022)...")
         
         # Build the fuzzy matching query for venues
         venue_query_parts = []
@@ -308,24 +309,15 @@ class GraphExporter:
         print("=" * 70)
 
 if __name__ == "__main__":
-    import sys
-    
-    # --- Configuration ---
-    
-    # This is the password for your EXISTING (large) database
-    NEO4J_PASSWORD = "12345678"  # <-- IMPORTANT: Use your "combined" DB password
-    NEO4J_URI = "neo4j://127.0.0.1:7687"
-    NEO4J_USERNAME = "neo4j"
-    
-    # This is where the new CSVs will be saved
-    OUTPUT_DIR = "data/focused_v1"
-    
-    # Years for the seed papers
-    SEED_YEARS = [2019, 2020, 2021, 2022]
-    
-    # Fuzzy venue list. We use lowercase and 'contains'
-    # This matches "ICLR", "ICLR 2020", "International Conference on Learning Representations"
-    SEED_VENUE_LIST = [
+    parser = argparse.ArgumentParser(description="Run Subgraph Exporter")
+    parser.add_argument('--uri', type=str, required=True, help="Neo4j connection URI")
+    parser.add_argument('--username', type=str, required=True, help="Neo4j username")
+    parser.add_argument('--password', type=str, required=True, help="Neo4j password")
+    parser.add_argument('--output_dir', type=str, required=True, help="Output directory for exported CSVs")
+    args = parser.parse_args()
+
+    seed_years = [2019, 2020, 2021, 2022]
+    seed_venues = [
         "cvpr",
         "computer vision and pattern recognition",
         "iclr",
@@ -333,28 +325,15 @@ if __name__ == "__main__":
         "icml",
         "international conference on machine learning"
     ]
-    
-    # ---------------------
-    
-    print("=" * 70)
-    print("🚀 Neo4j Focused Graph Exporter")
-    print("=" * 70)
-    print(f"   Connecting to: {NEO4J_URI}")
-    print(f"   Exporting to:  {OUTPUT_DIR}")
-    print(f"   Seed Venues:   {', '.join(SEED_VENUE_LIST)}")
-    print(f"   Seed Years:    {SEED_YEARS}")
-    print("\n⚠️  This will query your LARGE database and may take time.")
-    
+
     try:
         exporter = GraphExporter(
-            uri=NEO4J_URI,
-            username=NEO4J_USERNAME,
-            password=NEO4J_PASSWORD,
-            output_dir=OUTPUT_DIR
+            uri=args.uri,
+            username=args.username,
+            password=args.password,
+            output_dir=args.output_dir
         )
-        
-        exporter.run_export(SEED_VENUE_LIST, SEED_YEARS)
-        
+        exporter.run_export(seed_venues, seed_years)
     except Exception as e:
         print(f"\n❌ Export failed: {e}")
         import traceback
