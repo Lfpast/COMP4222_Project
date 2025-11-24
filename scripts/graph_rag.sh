@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Change to project root directory
+cd "$(dirname "$0")/.."
+
 # ============================================================================
 # GraphRAG System - Unified Execution Script
 # ============================================================================
@@ -19,7 +22,7 @@ NEO4J_PASSWORD="12345678"
 # ============================================================================
 # Configuration - Model Path
 # ============================================================================
-MODEL_PATH="../training/models/link_prediction_v4/han_embeddings.pth"
+MODEL_PATH="training/models/link_prediction_v4/han_embeddings.pth"
 
 # ============================================================================
 # Configuration - GraphRAG Query Parameters
@@ -61,7 +64,7 @@ case "$COMMAND" in
         echo "=========================================="
         echo "Running GraphRAG System Test Suite"
         echo "=========================================="
-        python ../GraphRAG/test_graph_rag.py \
+        python GraphRAG/test_graph_rag.py \
             --neo4j_uri "$NEO4J_URI" \
             --neo4j_username "$NEO4J_USERNAME" \
             --neo4j_password "$NEO4J_PASSWORD" \
@@ -73,7 +76,7 @@ case "$COMMAND" in
         echo "=========================================="
         echo "Evaluating HAN vs SBERT Retrieval Performance"
         echo "=========================================="
-        python ../GraphRAG/evaluate_retrieval.py \
+        python GraphRAG/evaluate_retrieval.py \
             --neo4j_uri "$NEO4J_URI" \
             --neo4j_username "$NEO4J_USERNAME" \
             --neo4j_password "$NEO4J_PASSWORD" \
@@ -95,7 +98,7 @@ case "$COMMAND" in
         python -c "
 import os
 import sys
-sys.path.insert(0, '../GraphRAG')
+sys.path.insert(0, 'GraphRAG')
 from dotenv import load_dotenv
 from graph_rag_system import AcademicRecommender, GraphRAGEngine
 
